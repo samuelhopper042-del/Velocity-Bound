@@ -44,9 +44,8 @@ p2_facing = -1
 p1_attack_frames = 0
 p2_attack_frames = 0
 ATTACK_DURATION = 15
-
-p1_has_hit = False  # Track if current swing already hit P2
-p2_has_hit = False  # Track if current swing already hit P1
+p1_has_hit = False # Track if current swing already hit P2
+p2_has_hit = False # Track if current swing already hit P1
 
 # Hitbox Dimensions
 HITBOX_WIDTH = 45
@@ -57,8 +56,8 @@ p2_hitbox = None
 # Knockback Physics Forces
 p1_kb_x = 0
 p2_kb_x = 0
-KNOCKBACK_DECAY = 0.88  # Smoother flight sliding deceleration curve
-KNOCKBACK_force = 12    # Standardized base launching force 
+KNOCKBACK_DECAY = 0.88 # Smoother flight sliding deceleration curve
+KNOCKBACK_force = 12 # Standardized base launching force
 
 # --- DAMAGE & STOCK TRACKING ---
 p1_stocks = 3
@@ -72,7 +71,6 @@ ui_font = pygame.font.SysFont("Arial", 28)
 # Match state tracker
 game_active = True
 winner_text = ""
-
 p1_hitstun = 0
 p2_hitstun = 0
 p1_invincible_frames = 0
@@ -85,7 +83,6 @@ p1_shield_hp = 100.0
 p2_shield_hp = 100.0
 p1_shield_stun = 0
 p2_shield_stun = 0
-
 MAX_SHIELD_HP = 100.0
 SHIELD_DRAIN_SPEED = 0.4
 SHIELD_REGEN_SPEED = 0.15
@@ -105,12 +102,12 @@ while True:
                 p2_stocks = 3
                 p1_damage = 0
                 p2_damage = 0
-                p1_rect.x = 350
+                p1_x = 350.0
                 p1_rect.y = 300
-                p2_rect.x = 880
+                p2_x = 880.0
                 p2_rect.y = 300
-                p1_kb_x = 0
-                p2_kb_x = 0
+                p1_kb_x = 0.0
+                p2_kb_x = 0.0
                 p1_y_velocity = 0
                 p2_y_velocity = 0
                 p1_jumps_left = 2
@@ -125,42 +122,45 @@ while True:
                 p2_shield_hp = 100.0
                 p1_shield_stun = 0
                 p2_shield_stun = 0
-                
-            # Jumps and attacks are only processed if match is active
+                p1_hitstun = 0
+                p2_hitstun = 0
+                p1_invincible_frames = 0
+                p2_invincible_frames = 0
+
             if game_active:
-                # --- PLAYER 1 JUMP TAPPED ---
                 if event.key == pygame.K_w and p1_jumps_left > 0:
                     p1_y_velocity = -JUMP_POWER
                     p1_jumps_left -= 1
                     
-                # --- PLAYER 2 JUMP TAPPED ---
                 if event.key == pygame.K_i and p2_jumps_left > 0:
                     p2_y_velocity = -JUMP_POWER
                     p2_jumps_left -= 1
                     
-                # --- PLAYER 1 ATTACK (F KEY) ---
                 if event.key == pygame.K_f and p1_attack_frames == 0:
                     p1_attack_frames = ATTACK_DURATION
-                    p1_has_hit = False  # Reset state for the brand new attack swing
+                    p1_has_hit = False
                     
-                # --- PLAYER 2 ATTACK (H KEY) ---
                 if event.key == pygame.K_h and p2_attack_frames == 0:
                     p2_attack_frames = ATTACK_DURATION
-                    p2_has_hit = False  # Reset state for the brand new attack swing
+                    p2_has_hit = False
 
     # 2. Game Logic Updates
     keys = pygame.key.get_pressed()
+    
     if game_active:
-        if p1_invincible_frames > 0: p1_invincible_frames -= 1
-        if p2_invincible_frames > 0: p2_invincible_frames -= 1
-    # --- STEP 1: PLAYER MOVEMENT & TRACK FACING DIRECTIONS ---
-    if game_active:
-        
-        # PLAYER 1 SHIELD CHECK
-        if p1_hitstun > 0:
-            P1_shield_stun -= 1
+        if p1_invincible_frames > 0:
+            p1_invincible_frames -= 1
+        if p2_invincible_frames > 0:
+            p2_invincible_frames -= 1
+
+        # === PLAYER 1 SHIELD, STUN, & MOVEMENT ===
+        if p1_shield_stun > 0:
+            p1_shield_stun -= 1
             p1_is_shielding = False
-        elif p1_hitstun == 0 and keys[pygame.K_s] and p1_shield_hp > 0:
+        elif p1_hitstun > 0:
+            p1_hitstun -= 1
+            p1_is_shielding = False
+        elif keys[pygame.K_s] and p1_shield_hp > 0:
             p1_is_shielding = True
             p1_shield_hp -= SHIELD_DRAIN_SPEED
             if p1_shield_hp <= 0:
@@ -169,24 +169,27 @@ while True:
                 p1_is_shielding = False
         else:
             p1_is_shielding = False
-            if p1_shield_hp < MAX_SHIELD_HP:
-                p1_shield_hp += SHIELD_REGEN_SPEED
-        
-        # P1 MOVEMENT CONTROL LOGIC
-        if p1_shield_stun > 0 or p1_hitstun > 0:
-            if p1_hitstun > 0: p1_hitstun -= 1
-        elif p1_is_shielding:
-            pass
-        else:
+
+        if p1_shield_hp < MAX_SHIELD_HP and not p1_is_shielding:
+            p1_shield_hp += SHIELD_REGEN_SPEED
+
+        # P1 Movement Control
+        if not p1_is_shielding and p1_shield_stun == 0 and p1_hitstun == 0:
             if keys[pygame.K_a]:
-                p1_rect.x -= PLAYER_SPEED
+                p1_x -= PLAYER_SPEED
+                p1_facing = -1
+            if keys[pygame.K_d]:
+                p1_x += PLAYER_SPEED
                 p1_facing = 1
 
-        # === PLAYER 2 SHIELD & STUN SYSTEM ===
+        # === PLAYER 2 SHIELD, STUN, & MOVEMENT ===
         if p2_shield_stun > 0:
             p2_shield_stun -= 1
             p2_is_shielding = False
-        elif p2_hitstun == 0 and keys[pygame.K_k] and p2_shield_hp > 0:
+        elif p2_hitstun > 0:
+            p2_hitstun -= 1
+            p2_is_shielding = False
+        elif keys[pygame.K_k] and p2_shield_hp > 0:
             p2_is_shielding = True
             p2_shield_hp -= SHIELD_DRAIN_SPEED
             if p2_shield_hp <= 0:
@@ -195,171 +198,137 @@ while True:
                 p2_is_shielding = False
         else:
             p2_is_shielding = False
-            if p2_shield_hp < MAX_SHIELD_HP:
-                p2_shield_hp += SHIELD_REGEN_SPEED
-        
-        # P2 Movement Control Logic
-        if p2_shield_stun > 0 or p2_hitstun > 0:
-            if p2_hitstun > 0: p2_hitstun -= 1
-        elif p2_is_shielding:
-            pass
-        else:
-            if keys[pygame.K_j]:
-               p2_rect.x -= PLAYER_SPEED
-               p2_facing = -1
-            if keys[pygame.K_l]:
-                p2_rect.x += PLAYER_SPEED
-                p2_facing = 1
 
-        # --- PLAYER 2 SHIELD CHECK ---
-        if p2_hitstun == 0:
-            p2_is_shielding = keys[pygame.K_k]
-        else: p2_is_shielding = False
+        if p2_shield_hp < MAX_SHIELD_HP and not p2_is_shielding:
+            p2_shield_hp += SHIELD_REGEN_SPEED
 
-        # Player 1 Movement Control (Blocked if in hitstun)
-        if p1_hitstun > 0:
-            p1_hitstun -= 1
-        elif p1_is_shielding:
-            pass
-        else:
-            if keys[pygame.K_a]:
-                p1_rect.x -= PLAYER_SPEED
-                p1_facing = -1
-            if keys[pygame.K_d]:
-                p1_rect.x += PLAYER_SPEED
-                p1_facing = 1
-            
-        # Player 2 Movement Control (Blocked if in hitstun)
-        if p2_hitstun > 0:
-            p2_hitstun -= 1
-        elif p2_is_shielding:
-            pass
-        else:
+        # P2 Movement Control
+        if not p2_is_shielding and p2_shield_stun == 0 and p2_hitstun == 0:
             if keys[pygame.K_j]:
-                p2_rect.x -= PLAYER_SPEED
+                p2_x -= PLAYER_SPEED
                 p2_facing = -1
             if keys[pygame.K_l]:
-                p2_rect.x += PLAYER_SPEED
+                p2_x += PLAYER_SPEED
                 p2_facing = 1
 
-    # --- STEP 2: TICK DOWN ATTACK TIMERS & GENERATE HITBOX RECTANGLES ---
-    p1_hitbox = None
-    if p1_attack_frames > 0:
-        p1_attack_frames -= 1
-        p1_center_y = p1_rect.y + (p1_rect.height // 2)
-        if p1_facing == 1:
-            p1_hitbox = pygame.Rect(p1_rect.right, p1_center_y - (HITBOX_HEIGHT // 2), HITBOX_WIDTH, HITBOX_HEIGHT)
-        else:
-            p1_hitbox = pygame.Rect(p1_rect.left - HITBOX_WIDTH, p1_center_y - (HITBOX_HEIGHT // 2), HITBOX_WIDTH, HITBOX_HEIGHT)
+        # Write positions to hitboxes
+        p1_rect.x = int(p1_x)
+        p2_rect.x = int(p2_x)
+        # --- STEP 2: TICK DOWN ATTACK TIMERS & GENERATE HITBOX RECTANGLES ---
+        p1_hitbox = None
+        if p1_attack_frames > 0:
+            p1_attack_frames -= 1
+            p1_center_y = p1_rect.y + (p1_rect.height // 2)
+            if p1_facing == 1:
+                p1_hitbox = pygame.Rect(p1_rect.right, p1_center_y - (HITBOX_HEIGHT // 2), HITBOX_WIDTH, HITBOX_HEIGHT)
+            else:
+                p1_hitbox = pygame.Rect(p1_rect.left - HITBOX_WIDTH, p1_center_y - (HITBOX_HEIGHT // 2), HITBOX_WIDTH, HITBOX_HEIGHT)
 
-    p2_hitbox = None
-    if p2_attack_frames > 0:
-        p2_attack_frames -= 1
-        p2_center_y = p2_rect.y + (p2_rect.height // 2)
-        if p2_facing == 1:
-            p2_hitbox = pygame.Rect(p2_rect.right, p2_center_y - (HITBOX_HEIGHT // 2), HITBOX_WIDTH, HITBOX_HEIGHT)
-        else:
-            p2_hitbox = pygame.Rect(p2_rect.left - HITBOX_WIDTH, p2_center_y - (HITBOX_HEIGHT // 2), HITBOX_WIDTH, HITBOX_HEIGHT)
+        p2_hitbox = None
+        if p2_attack_frames > 0:
+            p2_attack_frames -= 1
+            p2_center_y = p2_rect.y + (p2_rect.height // 2)
+            if p2_facing == 1:
+                p2_hitbox = pygame.Rect(p2_rect.right, p2_center_y - (HITBOX_HEIGHT // 2), HITBOX_WIDTH, HITBOX_HEIGHT)
+            else:
+                p2_hitbox = pygame.Rect(p2_rect.left - HITBOX_WIDTH, p2_center_y - (HITBOX_HEIGHT // 2), HITBOX_WIDTH, HITBOX_HEIGHT)
 
-    # --- STEP 3: COMBAT HIT DETECTION ---
-    # Check if P1's weapon hit P2 (Only processes if P1 hasn't already hit on this swing execution)
-    if p1_hitbox and p1_hitbox.colliderect(p2_rect) and not p1_has_hit and p2_invincible_frames == 0:
-        p2_damage += 12 
-        p2_kb_x = (KNOCKBACK_force + (p2_damage // 2)) * p1_facing
-        p2_y_velocity = -7  # Vertical arc lift force
-        p1_has_hit = True   # Block additional hits until the player inputs a new strike swing
-        p2_hitstun = int(abs(p2_kb_x) * 0.75)    # Scale hitstun duration to launch force!
+        # --- STEP 3: COMBAT HIT DETECTION ---
+        if p1_hitbox and p1_hitbox.colliderect(p2_rect) and not p1_has_hit and p2_invincible_frames == 0:
+            p2_damage += 12
+            p2_kb_x = float((KNOCKBACK_force + (p2_damage // 2)) * p1_facing)
+            p2_y_velocity = -7
+            p1_has_hit = True
+            p2_hitstun = int(abs(p2_kb_x) * 0.75)
 
-    # Check if P2's weapon hit P1 (Only processes if P2 hasn't already hit on this swing execution)
-    if p2_hitbox and p2_hitbox.colliderect(p1_rect) and not p2_has_hit and p1_invincible_frames == 0:
-        p1_damage += 12 
-        p1_kb_x = (KNOCKBACK_force + (p1_damage // 2)) * p2_facing
-        p1_y_velocity = -7  # Vertical arc lift force
-        p2_has_hit = True   # Block additional hits until the player inputs a new strike swing
-        p1_hitstun = int(abs(p1_kb_x) * 0.75)    # Scale hitstun duration to launch force!
+        if p2_hitbox and p2_hitbox.colliderect(p1_rect) and not p2_has_hit and p1_invincible_frames == 0:
+            p1_damage += 12
+            p1_kb_x = float((KNOCKBACK_force + (p1_damage // 2)) * p2_facing)
+            p1_y_velocity = -7
+            p2_has_hit = True
+            p1_hitstun = int(abs(p1_kb_x) * 0.75)
 
-    # --- STEP 4: APPLY AND DECAY ACTIVE KNOCKBACK FORCES ---
-    p1_rect.x += int(p1_kb_x)
-    p2_rect.x += int(p2_kb_x)
-    p1_kb_x *= KNOCKBACK_DECAY
-    p2_kb_x *= KNOCKBACK_DECAY
-    
-    # Micro drift cleanup cutoff
-    if abs(p1_kb_x) < 0.1: p1_kb_x = 0
-    if abs(p2_kb_x) < 0.1: p2_kb_x = 0
+        # --- STEP 4: APPLY AND DECAY ACTIVE KNOCKBACK FORCES ---
+        p1_x += p1_kb_x
+        p2_x += p2_kb_x
+        p1_kb_x *= KNOCKBACK_DECAY
+        p2_kb_x *= KNOCKBACK_DECAY
+        if abs(p1_kb_x) < 0.1: p1_kb_x = 0.0
+        if abs(p2_kb_x) < 0.1: p2_kb_x = 0.0
 
-    # --- STEP 5: PERMANENT SOLIDITY ENGINE ---
-    if p1_rect.colliderect(p2_rect):
-        overlap_left = p1_rect.right - p2_rect.left
-        overlap_right = p2_rect.right - p1_rect.left
-        if overlap_left < overlap_right:
-            push = overlap_left // 2
-            p1_rect.x -= push
-            p2_rect.x += push
-            if p1_kb_x > 0: p1_kb_x = 0
-            if p2_kb_x < 0: p2_kb_x = 0
-        else:
-            push = overlap_right // 2
-            p1_rect.x += push
-            p2_rect.x -= push
-            if p1_kb_x < 0: p1_kb_x = 0
-            if p2_kb_x > 0: p2_kb_x = 0
+        # Sync floats to rects before collision check
+        p1_rect.x = int(p1_x)
+        p2_rect.x = int(p2_x)
 
-    # --- STEP 6: VERTICAL PHYSICS & FLOOR DETECTION ---
-    p1_y_velocity += GRAVITY
-    p2_y_velocity += GRAVITY
-    p1_rect.y += p1_y_velocity
-    p2_rect.y += p2_y_velocity
+        # --- STEP 5: PERMANENT SOLIDITY ENGINE ---
+        if p1_rect.colliderect(p2_rect):
+            overlap_left = p1_rect.right - p2_rect.left
+            overlap_right = p2_rect.right - p1_rect.left
+            if overlap_left < overlap_right:
+                push = overlap_left // 2
+                p1_x -= push
+                p2_x += push
+                if p1_kb_x > 0: p1_kb_x = 0.0
+                if p2_kb_x < 0: p2_kb_x = 0.0
+            else:
+                push = overlap_right // 2
+                p1_x += push
+                p2_x -= push
+                if p1_kb_x < 0: p1_kb_x = 0.0
+                if p2_kb_x > 0: p2_kb_x = 0.0
+            p1_rect.x = int(p1_x)
+            p2_rect.x = int(p2_x)
 
-    if p1_rect.colliderect(stage_rect):
-        p1_rect.bottom = stage_rect.top
-        p1_y_velocity = 0
-        p1_jumps_left = 2
+        # --- STEP 6: VERTICAL PHYSICS & FLOOR DETECTION ---
+        p1_y_velocity += GRAVITY
+        p2_y_velocity += GRAVITY
+        p1_rect.y += int(p1_y_velocity)
+        p2_rect.y += int(p2_y_velocity)
 
-    if p2_rect.colliderect(stage_rect):
-        p2_rect.bottom = stage_rect.top
-        p2_y_velocity = 0
-        p2_jumps_left = 2
+        if p1_rect.colliderect(stage_rect):
+            p1_rect.bottom = stage_rect.top
+            p1_y_velocity = 0
+            p1_jumps_left = 2
+        if p2_rect.colliderect(stage_rect):
+            p2_rect.bottom = stage_rect.top
+            p2_y_velocity = 0
+            p2_jumps_left = 2
 
-    # --- BLAST ZONE & RESPAWN DETECTION LOOP ---
-    DEAD_ZONE_LEFT = -100
-    DEAD_ZONE_RIGHT = SCREEN_WIDTH + 100
-    DEAD_ZONE_BOTTOM = SCREEN_HEIGHT + 100
-    DEAD_ZONE_TOP = -100  # Ceiling boundary added
+        # --- BLAST ZONE & RESPAWN DETECTION LOOP ---
+        DEAD_ZONE_LEFT = -100
+        DEAD_ZONE_RIGHT = SCREEN_WIDTH + 100
+        DEAD_ZONE_BOTTOM = SCREEN_HEIGHT + 100
+        DEAD_ZONE_TOP = -100
 
-    if p1_rect.x < DEAD_ZONE_LEFT or p1_rect.x > DEAD_ZONE_RIGHT or p1_rect.y > DEAD_ZONE_BOTTOM or p1_rect.y < DEAD_ZONE_TOP:
-        p1_stocks -= 1
-        p1_damage = 0  # Re-initializes damage back to zero baseline on stock loss
-        p1_rect.x = 440
-        p1_rect.y = 150
-        p1_y_velocity = 0
-        p1_kb_x = 0
-        p1_invincible_frames = 90
+        if p1_rect.x < DEAD_ZONE_LEFT or p1_rect.x > DEAD_ZONE_RIGHT or p1_rect.y > DEAD_ZONE_BOTTOM or p1_rect.y < DEAD_ZONE_TOP:
+            p1_stocks -= 1
+            p1_damage = 0
+            p1_x = 440.0
+            p1_rect.y = 150
+            p1_y_velocity = 0
+            p1_kb_x = 0.0
+            p1_invincible_frames = 90
 
-    if p2_rect.x < DEAD_ZONE_LEFT or p2_rect.x > DEAD_ZONE_RIGHT or p2_rect.y > DEAD_ZONE_BOTTOM or p2_rect.y < DEAD_ZONE_TOP:
-        p2_stocks -= 1
-        p2_damage = 0  # Re-initializes damage back to zero baseline on stock loss
-        p2_rect.x = 790
-        p2_rect.y = 150
-        p2_y_velocity = 0
-        p2_kb_x = 0
-        p2_invincible_frames = 90
+        if p2_rect.x < DEAD_ZONE_LEFT or p2_rect.x > DEAD_ZONE_RIGHT or p2_rect.y > DEAD_ZONE_BOTTOM or p2_rect.y < DEAD_ZONE_TOP:
+            p2_stocks -= 1
+            p2_damage = 0
+            p2_x = 790.0
+            p2_rect.y = 150
+            p2_y_velocity = 0
+            p2_kb_x = 0.0
+            p2_invincible_frames = 90
 
-    # --- CHECK FOR GAME OVER CONDITION ---
-    if p1_stocks <= 0:
-        game_active = False
-        winner_text = "PLAYER 2 WINS!"
-    if p2_stocks <= 0:
-        game_active = False
-        winner_text = "PLAYER 1 WINS!"
+        if p1_stocks <= 0:
+            game_active = False
+            winner_text = "PLAYER 2 WINS!"
+        if p2_stocks <= 0:
+            game_active = False
+            winner_text = "PLAYER 1 WINS!"
 
     # 3. Drawing / Rendering
     screen.fill((20, 20, 25))
-
-    # Draw Stage Floor & Fighters
     pygame.draw.rect(screen, STAGE_COLOR, stage_rect)
-    
-    # Draw Player 1 (Flashes Gold/Yellow if Invincible)
+
     if p1_shield_stun > 0 and (p1_shield_stun // 4) % 2 == 0:
         pygame.draw.rect(screen, (255, 255, 255), p1_rect)
     elif p1_invincible_frames > 0 and (p1_invincible_frames // 4) % 2 == 0:
@@ -367,39 +336,33 @@ while True:
     else:
         pygame.draw.rect(screen, p1_COLOR, p1_rect)
 
-    # Draw Player 2 (Flashes Gold/Yellow if Invincible)
     if p2_shield_stun > 0 and (p2_shield_stun // 4) % 2 == 0:
         pygame.draw.rect(screen, (255, 255, 255), p2_rect)
     elif p2_invincible_frames > 0 and (p2_invincible_frames // 4) % 2 == 0:
         pygame.draw.rect(screen, (255, 215, 0), p2_rect)
     else:
-        pygame.draw.rect(screen, p2_COLOR, p2_rect)                           
+        pygame.draw.rect(screen, p2_COLOR, p2_rect)
 
-    # Draw Weapon Visuals
     if p1_hitbox:
         pygame.draw.rect(screen, (255, 255, 0), p1_hitbox)
     if p2_hitbox:
         pygame.draw.rect(screen, (255, 255, 0), p2_hitbox)
 
-    # Draw P1 Shield Bubble (Shrinks based on shield health percentage)
     if p1_is_shielding:
-        p1_center = (p1_rect.width // 2, p1_rect.y + p1_rect.height // 2)
+        p1_center = (p1_rect.x + p1_rect.width // 2, p1_rect.y + p1_rect.height // 2)
         p1_dynamic_radius = int(20 + (25 * (p1_shield_hp / MAX_SHIELD_HP)))
-        pygame.draw.circle(screen, (0, 255, 255 ), p1_center, p1_dynamic_radius, 3)
-        
-    # Draw P2 Shield Bubble (Shrinks based on shield health percentage)
+        pygame.draw.circle(screen, (0, 255, 255), p1_center, p1_dynamic_radius, 3)
+
     if p2_is_shielding:
-        p2_center = (p2_rect.width // 2, p2_rect.y + p2_rect.height // 2)
+        p2_center = (p2_rect.x + p2_rect.width // 2, p2_rect.y + p2_rect.height // 2)
         p2_dynamic_radius = int(20 + (25 * (p2_shield_hp / MAX_SHIELD_HP)))
         pygame.draw.circle(screen, (255, 0, 255), p2_center, p2_dynamic_radius, 3)
-        
-    # Render Interface Metrics (Displays current Stocks alongside live Damage Metrics)
-    p1_stock_text = ui_font.render(f"P1 STOCKS: {p1_stocks}  |  {p1_damage}%", True, (255, 255, 255))
-    p2_stock_text = ui_font.render(f"{p2_damage}%  |  P2 STOCKS: {p2_stocks}", True, (255, 255, 255))
+
+    p1_stock_text = ui_font.render(f"P1 STOCKS: {p1_stocks} | {p1_damage}%", True, (255, 255, 255))
+    p2_stock_text = ui_font.render(f"{p2_damage}% | P2 STOCKS: {p2_stocks}", True, (255, 255, 255))
     screen.blit(p1_stock_text, (50, 30))
     screen.blit(p2_stock_text, (950, 30))
 
-    # Display Winner Message if Match is over
     if not game_active:
         end_surface = ui_font.render(winner_text, True, (255, 255, 0))
         reset_tip_surface = ui_font.render("Press 'R' to Restart Match", True, (150, 150, 150))
