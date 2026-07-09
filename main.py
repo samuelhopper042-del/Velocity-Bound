@@ -121,7 +121,11 @@ while True:
                 p2_has_hit = False
                 game_active = True
                 winner_text = ""
-
+                p1_shield_hp = 100.0
+                p2_shield_hp = 100.0
+                p1_shield_stun = 0
+                p2_shield_stun = 0
+                
             # Jumps and attacks are only processed if match is active
             if game_active:
                 # --- PLAYER 1 JUMP TAPPED ---
@@ -356,13 +360,17 @@ while True:
     pygame.draw.rect(screen, STAGE_COLOR, stage_rect)
     
     # Draw Player 1 (Flashes Gold/Yellow if Invincible)
-    if p1_invincible_frames > 0 and (p1_invincible_frames // 4) % 2 == 0:
+    if p1_shield_stun > 0 and (p1_shield_stun // 4) % 2 == 0:
+        pygame.draw.rect(screen, (255, 255, 255), p1_rect)
+    elif p1_invincible_frames > 0 and (p1_invincible_frames // 4) % 2 == 0:
         pygame.draw.rect(screen, (255, 215, 0), p1_rect)
     else:
         pygame.draw.rect(screen, p1_COLOR, p1_rect)
 
     # Draw Player 2 (Flashes Gold/Yellow if Invincible)
-    if p2_invincible_frames > 0 and (p2_invincible_frames // 4) % 2 == 0:
+    if p2_shield_stun > 0 and (p2_shield_stun // 4) % 2 == 0:
+        pygame.draw.rect(screen, (255, 255, 255), p2_rect)
+    elif p2_invincible_frames > 0 and (p2_invincible_frames // 4) % 2 == 0:
         pygame.draw.rect(screen, (255, 215, 0), p2_rect)
     else:
         pygame.draw.rect(screen, p2_COLOR, p2_rect)                           
@@ -377,9 +385,14 @@ while True:
     if p1_is_shielding:
         p1_center = (p1_rect.width // 2, p1_rect.y + p1_rect.height // 2)
         p1_dynamic_radius = int(20 + (25 * (p1_shield_hp / MAX_SHIELD_HP)))
-        pygame.draw.circle(screen, (0, 255, 255 ))
-
-
+        pygame.draw.circle(screen, (0, 255, 255 ), p1_center, p1_dynamic_radius, 3)
+        
+    # Draw P2 Shield Bubble (Shrinks based on shield health percentage)
+    if p2_is_shielding:
+        p2_center = (p2_rect.width // 2, p2_rect.y + p2_rect.height // 2)
+        p2_dynamic_radius = int(20 + (25 * (p2_shield_hp / MAX_SHIELD_HP)))
+        pygame.draw.circle(screen, (255, 0, 255), p2_center, p2_dynamic_radius, 3)
+        
     # Render Interface Metrics (Displays current Stocks alongside live Damage Metrics)
     p1_stock_text = ui_font.render(f"P1 STOCKS: {p1_stocks}  |  {p1_damage}%", True, (255, 255, 255))
     p2_stock_text = ui_font.render(f"{p2_damage}%  |  P2 STOCKS: {p2_stocks}", True, (255, 255, 255))
