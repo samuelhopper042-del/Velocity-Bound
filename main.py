@@ -356,7 +356,7 @@ async def main():  # FIXED: Wrapped game loop in async environment
                         p2_y = float(p2_rect.y)
                         p2_kb_y = 0.0
 
-            p1_kb_x *= KNOCKBACK_DECA
+            p1_kb_x *= KNOCKBACK_DECAY
             p1_kb_y *= KNOCKBACK_DECAY
             p2_kb_x *= KNOCKBACK_DECAY
             p2_kb_y *= KNOCKBACK_DECAY
