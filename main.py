@@ -505,7 +505,7 @@ async def main():  # FIXED: Wrapped game loop in async environment
         clock.tick(FPS)
         
         # FIXED: Gives breathing room to the browser window so it never freezes up
-        await asyncio.sleep(0) 
+    await asyncio.sleep(0) 
 
 # FIXED: Runs the runtime framework logic
 asyncio.run(main())
