@@ -14,6 +14,7 @@ clock = pygame.time.Clock()
 FPS = 60
 
 # --- GAME OBJECTS & STAGE SETUP ---
+
 stage_rect = pygame.Rect(240, 500, 800, 50)
 STAGE_COLOR = (70, 70, 80) # Steel gray
 
@@ -84,6 +85,17 @@ p1_stocks = 3
 p2_stocks = 3
 p1_damage = 0
 p2_damage = 0
+
+# --- STATE MACHINE ARCHITECTURE --- 
+STATE_IDLE = 0
+STATE_RUNNING = 1
+STATE_JUMPING = 2
+STATE_ATTACKING = 3
+STATE_SHIELDING = 4
+STATE_HITSTUN = 5
+STATE_HANGING = 6
+p1_state = STATE_IDLE
+p2_state = STATE_IDLE
 
 # UI Font Setup
 ui_font = pygame.font.SysFont("Arial", 28)
@@ -173,6 +185,36 @@ while True:
 
     # 2. Game Logic Updates
     keys = pygame.key.get_pressed()
+    if p1_is_hanging:
+        p1_state = STATE_HANGING
+    elif p1_hitstun > 0:
+        p1_state = STATE_HITSTUN
+    elif p1_is_shielding:
+        p1_state = STATE_SHIELDING
+    elif p1_attack_frames > 0:
+        p1_state = STATE_ATTACKING
+    elif p1_y_velocity != 0:
+        p1_state = STATE_JUMPING
+    elif keys[pygame.K_a] or keys[pygame.K_d]:
+        p1_state = STATE_RUNNING
+    else:
+        p1_state = STATE_IDLE
+
+    # === UPDATE PLAYER 2 STATE MACHINE ===
+    if p2_is_hanging:
+        p2_state = STATE_HANGING
+    elif p2_hitstun > 0:
+        p2_state = STATE_HITSTUN
+    elif p2_is_shielding:
+        p2_state = STATE_SHIELDING
+    elif p2_attack_frames > 0:
+        p2_state = STATE_ATTACKING
+    elif p2_y_velocity != 0:
+        p2_state = STATE_JUMPING
+    elif keys[pygame.K_j] or keys[pygame.K_l]:
+        p2_state = STATE_RUNNING
+    else:
+        p2_state = STATE_IDLE
     
     if game_active:
         if p1_invincible_frames > 0: p1_invincible_frames -= 1
