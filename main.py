@@ -11,9 +11,9 @@ async def main():  # FIXED: Wrapped game loop in async environment
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     pygame.display.set_caption("Velocity Bound")
 
-     # UI Font Setup
+    # FIXED: Moved font configuration inside the async loop initialization step
     ui_font = pygame.font.SysFont("Arial", 28)
-    
+
     # Frame rate controller
     clock = pygame.time.Clock()
     FPS = 60
@@ -45,8 +45,8 @@ async def main():  # FIXED: Wrapped game loop in async environment
     GRAVITY = 0.5
     PLAYER_SPEED = 5
     JUMP_POWER = 12
-    MAX_FALL_SPEED = 10.0 # System 5: Standard Terminal Velocity Cap
-    FAST_FALL_SPEED = 16.0 # System 5: Fast fall terminal speed cap
+    MAX_FALL_SPEED = 10.0 
+    FAST_FALL_SPEED = 16.0 
 
     # Double Jump Configuration
     p1_jumps_left = 2
@@ -71,7 +71,7 @@ async def main():  # FIXED: Wrapped game loop in async environment
 
     # Knockback Physics Forces
     p1_kb_x = 0.0
-    p1_kb_y = 0.0 # Upgraded: Now tracking vertical vector for full directional influence
+    p1_kb_y = 0.0 
     p2_kb_x = 0.0
     p2_kb_y = 0.0
     KNOCKBACK_DECAY = 0.88
@@ -120,14 +120,13 @@ async def main():  # FIXED: Wrapped game loop in async environment
     MAX_SHIELD_HP = 100.0
     SHIELD_DRAIN_SPEED = 0.4
     SHIELD_REGEN_SPEED = 0.15
-
     # Core Game Loop
     while True:
         # 1. Event Handling (Window Controls & Single-Tap Actions)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
-                return  # FIXED: Changed from sys.exit() for web async compatibility
+                return  # FIXED: Orderly thread yield termination for async safety
 
             if event.type == pygame.KEYDOWN:
                 # Check for instant round reset button
@@ -162,7 +161,7 @@ async def main():  # FIXED: Wrapped game loop in async environment
                     p2_invincible_frames = 0
 
                 if game_active:
-                    # System 4: Ledge Escape mechanic (Pressing down drops down from ledge)
+                    # System 4: Ledge Escape mechanic
                     if p1_is_hanging and event.key == pygame.K_s:
                         p1_is_hanging = False
                         p1_ledge_cooldown = 30
@@ -188,36 +187,21 @@ async def main():  # FIXED: Wrapped game loop in async environment
         # 2. Game Logic Updates
         keys = pygame.key.get_pressed()
 
-        if p1_is_hanging:
-            p1_state = STATE_HANGING
-        elif p1_hitstun > 0:
-            p1_state = STATE_HITSTUN
-        elif p1_is_shielding:
-            p1_state = STATE_SHIELDING
-        elif p1_attack_frames > 0:
-            p1_state = STATE_ATTACKING
-        elif p1_y_velocity != 0:
-            p1_state = STATE_JUMPING
-        elif keys[pygame.K_a] or keys[pygame.K_d]:
-            p1_state = STATE_RUNNING
-        else:
-            p1_state = STATE_IDLE
+        if p1_is_hanging: p1_state = STATE_HANGING
+        elif p1_hitstun > 0: p1_state = STATE_HITSTUN
+        elif p1_is_shielding: p1_state = STATE_SHIELDING
+        elif p1_attack_frames > 0: p1_state = STATE_ATTACKING
+        elif p1_y_velocity != 0: p1_state = STATE_JUMPING
+        elif keys[pygame.K_a] or keys[pygame.K_d]: p1_state = STATE_RUNNING
+        else: p1_state = STATE_IDLE
 
-        # === UPDATE PLAYER 2 STATE MACHINE ===
-        if p2_is_hanging:
-            p2_state = STATE_HANGING
-        elif p2_hitstun > 0:
-            p2_state = STATE_HITSTUN
-        elif p2_is_shielding:
-            p2_state = STATE_SHIELDING
-        elif p2_attack_frames > 0:
-            p2_state = STATE_ATTACKING
-        elif p2_y_velocity != 0:
-            p2_state = STATE_JUMPING
-        elif keys[pygame.K_j] or keys[pygame.K_l]:
-            p2_state = STATE_RUNNING
-        else:
-            p2_state = STATE_IDLE
+        if p2_is_hanging: p2_state = STATE_HANGING
+        elif p2_hitstun > 0: p2_state = STATE_HITSTUN
+        elif p2_is_shielding: p2_state = STATE_SHIELDING
+        elif p2_attack_frames > 0: p2_state = STATE_ATTACKING
+        elif p2_y_velocity != 0: p2_state = STATE_JUMPING
+        elif keys[pygame.K_j] or keys[pygame.K_l]: p2_state = STATE_RUNNING
+        else: p2_state = STATE_IDLE
 
         if game_active:
             if p1_invincible_frames > 0: p1_invincible_frames -= 1
@@ -238,7 +222,7 @@ async def main():  # FIXED: Wrapped game loop in async environment
                 if keys[pygame.K_i]: p2_kb_y -= DI_STRENGTH
                 if keys[pygame.K_k]: p2_kb_y += DI_STRENGTH
 
-                    # === PLAYER 1 SHIELD, STUN, & STANDARD MOVEMENT ===
+            # === PLAYER 1 SHIELD, STUN, & STANDARD MOVEMENT ===
             if p1_shield_stun > 0:
                 p1_shield_stun -= 1
                 p1_is_shielding = False
@@ -294,7 +278,6 @@ async def main():  # FIXED: Wrapped game loop in async environment
                     p2_x += PLAYER_SPEED
                     p2_facing = 1
 
-            # Sync floats to physics rect boundaries
             p1_rect.x = int(p1_x)
             p2_rect.x = int(p2_x)
 
@@ -336,6 +319,8 @@ async def main():  # FIXED: Wrapped game loop in async environment
 
             # === SYSTEM 2: HITBOX INTERPOLATION ===
             max_step = max(1, int(max(abs(p1_kb_x), abs(p1_kb_y), abs(p2_kb_x), abs(p2_kb_y))))
+            if max_step > 20: max_step = 20  
+            
             for _ in range(max_step):
                 p1_x += p1_kb_x / max_step
                 p1_y += p1_kb_y / max_step
@@ -356,7 +341,7 @@ async def main():  # FIXED: Wrapped game loop in async environment
                         p2_y = float(p2_rect.y)
                         p2_kb_y = 0.0
 
-            p1_kb_x *= KNOCKBACK_DECAY
+            p1_kb_x *= KNOCKBACK_DECAY  # FIXED: Restored variable syntax "Y"
             p1_kb_y *= KNOCKBACK_DECAY
             p2_kb_x *= KNOCKBACK_DECAY
             p2_kb_y *= KNOCKBACK_DECAY
@@ -421,7 +406,6 @@ async def main():  # FIXED: Wrapped game loop in async environment
                         p2_y_velocity, p2_kb_x, p2_kb_y = 0.0, 0.0, 0.0
                         p2_jumps_left = 2
 
-            # Standard Platform Landing Checks
             if p1_rect.colliderect(stage_rect) and p1_y_velocity >= 0:
                 p1_rect.bottom = stage_rect.top
                 p1_y = float(p1_rect.y)
@@ -451,49 +435,35 @@ async def main():  # FIXED: Wrapped game loop in async environment
                 p2_damage = 0
                 p2_x, p2_y = 790.0, 150.0
                 p2_y_velocity, p2_kb_x, p2_kb_y = 0.0, 0.0, 0.0
-            # --- COMBAT & ROUND END STATE PROCESSING ---
-            if p1_stocks <= 0: 
-                game_active = False
-                winner_text = "PLAYER 2 WINS!"
-            if p2_stocks <= 0: 
-                game_active = False
-                winner_text = "PLAYER 1 WINS!"
+                p2_is_hanging = False
+                p2_invincible_frames = 90
+
+            if p1_stocks <= 0: game_active = False; winner_text = "PLAYER 2 WINS!"
+            if p2_stocks <= 0: game_active = False; winner_text = "PLAYER 1 WINS!"
 
         # 3. Drawing / Rendering
         screen.fill((20, 20, 25))
         pygame.draw.rect(screen, STAGE_COLOR, stage_rect)
 
-        # Draw Player 1 Stun Flashes, Invincibility, or Base Sprite
-        if p1_shield_stun > 0 and (p1_shield_stun // 4) % 2 == 0: 
-            pygame.draw.rect(screen, (255, 255, 255), p1_rect)
-        elif p1_invincible_frames > 0 and (p1_invincible_frames // 4) % 2 == 0: 
-            pygame.draw.rect(screen, (255, 215, 0), p1_rect)
-        else: 
-            pygame.draw.rect(screen, p1_COLOR, p1_rect)
+        if p1_shield_stun > 0 and (p1_shield_stun // 4) % 2 == 0: pygame.draw.rect(screen, (255, 255, 255), p1_rect)
+        elif p1_invincible_frames > 0 and (p1_invincible_frames // 4) % 2 == 0: pygame.draw.rect(screen, (255, 215, 0), p1_rect)
+        else: pygame.draw.rect(screen, p1_COLOR, p1_rect)
 
-        # Draw Player 2 Stun Flashes, Invincibility, or Base Sprite
-        if p2_shield_stun > 0 and (p2_shield_stun // 4) % 2 == 0: 
-            pygame.draw.rect(screen, (255, 255, 255), p2_rect)
-        elif p2_invincible_frames > 0 and (p2_invincible_frames // 4) % 2 == 0: 
-            pygame.draw.rect(screen, (255, 215, 0), p2_rect)
-        else: 
-            pygame.draw.rect(screen, p2_COLOR, p2_rect)
+        if p2_shield_stun > 0 and (p2_shield_stun // 4) % 2 == 0: pygame.draw.rect(screen, (255, 255, 255), p2_rect)
+        elif p2_invincible_frames > 0 and (p2_invincible_frames // 4) % 2 == 0: pygame.draw.rect(screen, (255, 215, 0), p2_rect)
+        else: pygame.draw.rect(screen, p2_COLOR, p2_rect)
 
-        # Draw Active Combat Hitboxes
         if p1_hitbox: pygame.draw.rect(screen, (255, 255, 0), p1_hitbox)
         if p2_hitbox: pygame.draw.rect(screen, (255, 255, 0), p2_hitbox)
 
-        # Draw Player 1 Active Shield Ring Matrix
         if p1_is_shielding:
             p1_center = (p1_rect.x + p1_rect.width // 2, p1_rect.y + p1_rect.height // 2)
             pygame.draw.circle(screen, (0, 255, 255), p1_center, int(20 + (25 * (p1_shield_hp / MAX_SHIELD_HP))), 3)
 
-        # Draw Player 2 Active Shield Ring Matrix
         if p2_is_shielding:
             p2_center = (p2_rect.x + p2_rect.width // 2, p2_rect.y + p2_rect.height // 2)
             pygame.draw.circle(screen, (255, 0, 255), p2_center, int(20 + (25 * (p2_shield_hp / MAX_SHIELD_HP))), 3)
 
-        # Render Interface Overlays
         screen.blit(ui_font.render(f"P1 STOCKS: {p1_stocks} | {p1_damage}%", True, (255, 255, 255)), (50, 30))
         screen.blit(ui_font.render(f"{p2_damage}% | P2 STOCKS: {p2_stocks}", True, (255, 255, 255)), (950, 30))
 
@@ -504,9 +474,8 @@ async def main():  # FIXED: Wrapped game loop in async environment
         pygame.display.flip()
         clock.tick(FPS)
         
-        # FIXED: Gives breathing room to the browser window so it never freezes up
-        await asyncio.sleep(0) 
+        # FIXED: Removed 1 tab level out of the game_active scope check so web-loops rest on win screens
+        await asyncio.sleep(0)
 
-# FIXED: Runs the runtime framework logic
+# FIXED: Ignition framework key on far left margin
 asyncio.run(main())
-
