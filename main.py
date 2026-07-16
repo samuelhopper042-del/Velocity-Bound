@@ -11,6 +11,9 @@ async def main():  # FIXED: Wrapped game loop in async environment
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     pygame.display.set_caption("Velocity Bound")
 
+     # UI Font Setup
+    ui_font = pygame.font.SysFont("Arial", 28)
+    
     # Frame rate controller
     clock = pygame.time.Clock()
     FPS = 60
@@ -98,9 +101,6 @@ async def main():  # FIXED: Wrapped game loop in async environment
 
     p1_state = STATE_IDLE
     p2_state = STATE_IDLE
-
-    # UI Font Setup
-    ui_font = pygame.font.SysFont("Arial", 28)
 
     # Match state tracker
     game_active = True
@@ -505,7 +505,7 @@ async def main():  # FIXED: Wrapped game loop in async environment
         clock.tick(FPS)
         
         # FIXED: Gives breathing room to the browser window so it never freezes up
-    await asyncio.sleep(0) 
+        await asyncio.sleep(0) 
 
 # FIXED: Runs the runtime framework logic
 asyncio.run(main())
