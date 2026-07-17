@@ -1,45 +1,36 @@
-# ============================================
-# Velocity Bound Settings
-# ============================================
-
-# Window Settings
+# Screen Settings
 SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
 FPS = 60
-TITLE = "Velocity Bound"
+TITLE = "My Fighting Game"
+
+
+# Colors
+P1_COLOR = (0, 100, 255)
+P2_COLOR = (255, 50, 50)
+STAGE_COLOR = (100, 100, 100)
 
 
 # Physics
 GRAVITY = 0.5
-PLAYER_SPEED = 5
 JUMP_POWER = 12
-MAX_FALL_SPEED = 10.0
-FAST_FALL_SPEED = 16.0
+PLAYER_SPEED = 5
+
+MAX_FALL_SPEED = 12
+FAST_FALL_SPEED = 18
 
 
 # Combat
-ATTACK_DURATION = 15
+ATTACK_DURATION = 10
+HITBOX_WIDTH = 50
+HITBOX_HEIGHT = 40
 
-HITBOX_WIDTH = 45
-HITBOX_HEIGHT = 30
-
-KNOCKBACK_DECAY = 0.88
-KNOCKBACK_force = 12
-
-DI_STRENGTH = 0.4
+KNOCKBACK_FORCE = 8
+KNOCKBACK_DECAY = 0.85
+DI_STRENGTH = 0.2
 
 
-# Shield System
-MAX_SHIELD_HP = 100.0
-SHIELD_DRAIN_SPEED = 0.4
-SHIELD_REGEN_SPEED = 0.15
-
-
-# Colors
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-
-STAGE_COLOR = (70, 70, 80)
-
-P1_COLOR = (0, 100, 255)
-P2_COLOR = (255, 50, 50)
+# Shield
+MAX_SHIELD_HP = 100
+SHIELD_DRAIN_SPEED = 0.5
+SHIELD_REGEN_SPEED = 0.2
