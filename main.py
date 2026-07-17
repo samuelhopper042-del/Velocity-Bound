@@ -1,6 +1,7 @@
 import pygame
 import sys
 import asyncio  # FIXED: Added for web browser loading compatibility
+from settings import *
 
 async def main():  # FIXED: Wrapped game loop in async environment
     # Initialize basic display
