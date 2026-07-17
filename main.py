@@ -7,22 +7,18 @@ async def main():  # FIXED: Wrapped game loop in async environment
     # Initialize basic display
     pygame.init()
 
-    # Setup display window (16:9 widescreen format)
-    SCREEN_WIDTH, SCREEN_HEIGHT = 1280, 720
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-    pygame.display.set_caption("Velocity Bound")
+    pygame.display.set_caption(TITLE)
 
     # FIXED: Moved font configuration inside the async loop initialization step
     ui_font = pygame.font.SysFont("Arial", 28)
 
     # Frame rate controller
     clock = pygame.time.Clock()
-    FPS = 60
 
     # --- GAME OBJECTS & STAGE SETUP ---
     stage_rect = pygame.Rect(240, 500, 800, 50)
-    STAGE_COLOR = (70, 70, 80) # Steel gray
-
+    
     # Ledge Grabbing Rectangles (Left and Right corners of the stage)
     LEDGE_WIDTH, LEDGE_HEIGHT = 15, 15
     left_ledge = pygame.Rect(stage_rect.left - 5, stage_rect.top, LEDGE_WIDTH, LEDGE_HEIGHT)
@@ -30,25 +26,20 @@ async def main():  # FIXED: Wrapped game loop in async environment
 
     # Player 1 Profile (WASD Character)
     p1_rect = pygame.Rect(350, 300, 50, 60)
-    p1_COLOR = (0, 100, 255) # Blue
+    p1_color = P1_COLOR
     p1_x = float(p1_rect.x)
     p1_y = float(p1_rect.y)
 
     # Player 2 Profile (IJKL Character)
     p2_rect = pygame.Rect(880, 300, 50, 60)
-    p2_COLOR = (255, 50, 50) # Red
+    p2_color = P2_COLOR
     p2_x = float(p2_rect.x)
     p2_y = float(p2_rect.y)
 
     # --- PLAYER VELOCITY & TERMINAL CONFIGURATION ---
     p1_y_velocity = 0.0
     p2_y_velocity = 0.0
-    GRAVITY = 0.5
-    PLAYER_SPEED = 5
-    JUMP_POWER = 12
-    MAX_FALL_SPEED = 10.0 
-    FAST_FALL_SPEED = 16.0 
-
+  
     # Double Jump Configuration
     p1_jumps_left = 2
     p2_jumps_left = 2
@@ -60,13 +51,11 @@ async def main():  # FIXED: Wrapped game loop in async environment
     # Attack Timers & Multi-Hit Prevention Flags
     p1_attack_frames = 0
     p2_attack_frames = 0
-    ATTACK_DURATION = 15
     p1_has_hit = False
     p2_has_hit = False
 
     # Hitbox Dimensions
-    HITBOX_WIDTH = 45
-    HITBOX_HEIGHT = 30
+
     p1_hitbox = None
     p2_hitbox = None
 
@@ -75,11 +64,8 @@ async def main():  # FIXED: Wrapped game loop in async environment
     p1_kb_y = 0.0 
     p2_kb_x = 0.0
     p2_kb_y = 0.0
-    KNOCKBACK_DECAY = 0.88
-    KNOCKBACK_force = 12
 
     # System 3 & 4: DI Strength & Ledge State Trackers
-    DI_STRENGTH = 0.4
     p1_is_hanging = False
     p1_ledge_cooldown = 0
     p2_is_hanging = False
@@ -118,9 +104,7 @@ async def main():  # FIXED: Wrapped game loop in async environment
     p2_shield_hp = 100.0
     p1_shield_stun = 0
     p2_shield_stun = 0
-    MAX_SHIELD_HP = 100.0
-    SHIELD_DRAIN_SPEED = 0.4
-    SHIELD_REGEN_SPEED = 0.15
+    
     # Core Game Loop
     while True:
         # 1. Event Handling (Window Controls & Single-Tap Actions)
@@ -448,11 +432,11 @@ async def main():  # FIXED: Wrapped game loop in async environment
 
         if p1_shield_stun > 0 and (p1_shield_stun // 4) % 2 == 0: pygame.draw.rect(screen, (255, 255, 255), p1_rect)
         elif p1_invincible_frames > 0 and (p1_invincible_frames // 4) % 2 == 0: pygame.draw.rect(screen, (255, 215, 0), p1_rect)
-        else: pygame.draw.rect(screen, p1_COLOR, p1_rect)
+        else: pygame.draw.rect(screen, p1_color, p1_rect)
 
         if p2_shield_stun > 0 and (p2_shield_stun // 4) % 2 == 0: pygame.draw.rect(screen, (255, 255, 255), p2_rect)
         elif p2_invincible_frames > 0 and (p2_invincible_frames // 4) % 2 == 0: pygame.draw.rect(screen, (255, 215, 0), p2_rect)
-        else: pygame.draw.rect(screen, p2_COLOR, p2_rect)
+        else: pygame.draw.rect(screen, p2_color, p2_rect)
 
         if p1_hitbox: pygame.draw.rect(screen, (255, 255, 0), p1_hitbox)
         if p2_hitbox: pygame.draw.rect(screen, (255, 255, 0), p2_hitbox)
