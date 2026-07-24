@@ -1,4 +1,5 @@
 # Screen Settings
+# These are the global window and timing settings used by pygame.
 SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
 FPS = 60
@@ -6,21 +7,34 @@ TITLE = "My Fighting Game"
 
 
 # Colors
+# Player and stage colors are used when drawing rectangles.
 P1_COLOR = (0, 100, 255)
 P2_COLOR = (255, 50, 50)
 STAGE_COLOR = (100, 100, 100)
 
+# Asset paths
+ASSETS_DIR = "assets"
+CHARACTER_ASSET_DIR = "characters"
+PLAYER_WIDTH = 72
+PLAYER_HEIGHT = 120
+PLAYER_DRAW_PLACEHOLDER = True
+
 
 # Physics
-GRAVITY = 0.5
-JUMP_POWER = 12
-PLAYER_SPEED = 5
+# Gravity and movement tuning values for the physics engine.
+GRAVITY = 0.5  # Downward acceleration each frame.
+JUMP_POWER = 12  # Initial upward velocity when a jump starts.
+PLAYER_SPEED = 5  # Horizontal walking speed.
 
-MAX_FALL_SPEED = 12
-FAST_FALL_SPEED = 18
+MAX_FALL_SPEED = 12  # Max falling speed during normal gravity.
+FAST_FALL_SPEED = 18  # Max falling speed when the player holds the fast-fall button.
+
+# Horizontal impulse applied when jumping away from a ledge hang.
+HANG_JUMP_HORIZONTAL = 6
 
 
 # Combat
+# Default values used by attacks and knockback calculations.
 ATTACK_DURATION = 10
 HITBOX_WIDTH = 50
 HITBOX_HEIGHT = 40
@@ -31,6 +45,7 @@ DI_STRENGTH = 0.2
 
 
 # Shield
+# Shield health and regen/drain settings for blocking.
 MAX_SHIELD_HP = 100
 SHIELD_DRAIN_SPEED = 0.5
 SHIELD_REGEN_SPEED = 0.2
