@@ -11,12 +11,12 @@ GAME_CONFIG = {
     "players": {
         "p1": {
             "start_x": 350,
-            "start_y": 300,
+            "start_y": 250,
             "color": [0, 100, 255],
         },
         "p2": {
             "start_x": 880,
-            "start_y": 300,
+            "start_y": 250,
             "color": [255, 50, 50],
         },
     },

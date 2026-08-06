@@ -64,6 +64,7 @@ async def main():
     )
     ground_shape.friction = 1.0
     ground_shape.elasticity = 0.0
+    ground_shape.filter = pymunk.ShapeFilter(categories=0b01)
     space.add(ground_shape)
 
     p1 = Player(
@@ -78,21 +79,14 @@ async def main():
     )
 
     def create_player_body(player):
-        # Use a box-shaped physics body for player movement and stage collision.
-        mass = 1.0
-        size = (PLAYER_WIDTH, PLAYER_HEIGHT)
-        moment = pymunk.inf
-        body = pymunk.Body(mass, moment)
-        body.position = player.x + PLAYER_WIDTH / 2, player.y + PLAYER_HEIGHT / 2
-        shape = pymunk.Poly.create_box(body, size)
-        shape.friction = 1.0
-        shape.elasticity = 0.0
-        space.add(body, shape)
-        player.body = body
-        player.shape = shape
+        player.create_body(space)
 
     create_player_body(p1)
     create_player_body(p2)
+
+    # Remove the temporary no-rotation debug override: setting body.moment to inf
+    # inside a ragdoll with joints and motors can produce invalid physics state.
+    # The game should use normal physics simulation for stable player movement.
 
     # Attach shared attack data to both players.
     p1.attack_set = DEFAULT_ATTACKS
@@ -156,8 +150,8 @@ async def main():
                     p2.stocks = 3
                     p1.damage = 0
                     p2.damage = 0
-                    p1.reset_position(350, 300)
-                    p2.reset_position(880, 300)
+                    p1.reset_position(350, 250)
+                    p2.reset_position(880, 250)
                     p1.attack_frames = 0
                     p2.attack_frames = 0
                     p1.has_hit = False
@@ -355,6 +349,20 @@ async def main():
             combat.shield_and_movement(p1, keys, pygame.K_a, pygame.K_d, pygame.K_s)
             combat.shield_and_movement(p2, keys, pygame.K_j, pygame.K_l, pygame.K_k)
 
+            # Walk timer updates for stick figure animation.
+            for p, left_key, right_key in ((p1, pygame.K_a, pygame.K_d), (p2, pygame.K_j, pygame.K_l)):
+                if getattr(p, 'body', None):
+                    if abs(p.body.velocity.x) > 0.5 and p.hitstun == 0 and not p.is_shielding and not p.is_hanging:
+                        p.walk_timer += 0.16
+                    else:
+                        p.walk_timer *= 0.88
+                    move_input = 0.0
+                    if keys[left_key]:
+                        move_input = -1.0
+                    elif keys[right_key]:
+                        move_input = 1.0
+                    p.update_limb_sim(move_input)
+
             # When using pymunk, player position is driven by the physics body.
             # The character rectangle and game state are synchronized after the
             # physics step below.
@@ -383,9 +391,14 @@ async def main():
             sync_player_rect(p2)
 
             def update_grounded(player):
-                if getattr(player, 'shape', None):
-                    collided = player.shape.shapes_collide(ground_shape).points
-                    if collided:
+                if getattr(player, 'shape', None) and getattr(player, 'body', None):
+                    on_ground = (
+                        player.rect.bottom >= stage_rect.top
+                        and player.rect.bottom <= stage_rect.top + 8
+                        and stage_rect.left <= player.rect.centerx <= stage_rect.right
+                        and player.body.velocity.y >= 0
+                    )
+                    if on_ground:
                         player.jumps_left = 2
                         if player.slam_ready:
                             player.slam_ready = False
@@ -393,10 +406,9 @@ async def main():
                             player.spin_frames = 0
                             player.spin_angle = 0.0
                             player.prone = True
-                            if getattr(player, 'body', None):
-                                player.body.velocity = (player.body.velocity.x, float(player.slam_strength * 0.5))
+                            player.body.velocity = (player.body.velocity.x, float(player.slam_strength * 0.5))
                             player.slam_strength = 0.0
-                    return bool(collided)
+                    return on_ground
                 return False
 
             update_grounded(p1)
@@ -407,37 +419,36 @@ async def main():
             DEAD_ZONE_LEFT, DEAD_ZONE_RIGHT = -100, SCREEN_WIDTH + 100
             DEAD_ZONE_BOTTOM, DEAD_ZONE_TOP = SCREEN_HEIGHT + 100, -100
 
+            def respawn(player, x, y):
+                player.stocks -= 1
+                player.damage = 0
+                player.reset_position(x, y)
+                player.kb_x = 0.0
+                player.kb_y = 0.0
+                if getattr(player, 'body', None):
+                    player.body.velocity = (0.0, 0.0)
+                player.is_hanging = False
+                player.invincible_frames = 90
+                player.attack_cooldown = 0
+                player.is_spinning = False
+                player.spin_frames = 0
+                player.slam_ready = False
+                player.slam_strength = 0.0
+
             if p1.rect.x < DEAD_ZONE_LEFT or p1.rect.x > DEAD_ZONE_RIGHT or p1.rect.y > DEAD_ZONE_BOTTOM or (p1.rect.y < DEAD_ZONE_TOP and p1.hitstun > 0):
-                p1.stocks -= 1
-                p1.damage = 0
-                p1.reset_position(440, 150)
-                p1.kb_x = 0.0
-                p1.kb_y = 0.0
-                if getattr(p1, 'body', None):
-                    p1.body.velocity = (0.0, 0.0)
-                p1.is_hanging = False
-                p1.invincible_frames = 90
-                p1.attack_cooldown = 0
-                p1.is_spinning = False
-                p1.spin_frames = 0
-                p1.slam_ready = False
-                p1.slam_strength = 0.0
+                respawn(p1, 440, 150)
 
             if p2.rect.x < DEAD_ZONE_LEFT or p2.rect.x > DEAD_ZONE_RIGHT or p2.rect.y > DEAD_ZONE_BOTTOM or (p2.rect.y < DEAD_ZONE_TOP and p2.hitstun > 0):
-                p2.stocks -= 1
-                p2.damage = 0
-                p2.reset_position(790, 150)
-                p2.kb_x = 0.0
-                p2.kb_y = 0.0
-                if getattr(p2, 'body', None):
-                    p2.body.velocity = (0.0, 0.0)
-                p2.is_hanging = False
-                p2.invincible_frames = 90
-                p2.attack_cooldown = 0
-                p2.is_spinning = False
-                p2.spin_frames = 0
-                p2.slam_ready = False
-                p2.slam_strength = 0.0
+                respawn(p2, 790, 150)
+
+            if p1.stocks <= 0 or p2.stocks <= 0:
+                game_active = False
+                if p1.stocks <= 0 and p2.stocks <= 0:
+                    winner_text = "Double KO!"
+                elif p1.stocks <= 0:
+                    winner_text = "Player 2 Wins!"
+                else:
+                    winner_text = "Player 1 Wins!"
         else:
             p1_hitbox = None
             p2_hitbox = None
