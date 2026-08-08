@@ -1,115 +1,83 @@
-# ============================================================
-# Velocity Bound
-#
-# Main Game File (refactored)
-#
-# This file wires together small modules:
-# - players/player.py
-# - stages/stage.py
-# - systems/physics.py
-# - systems/combat.py
-# - ui/hud.py
-# - attacks/
-# - data/
-#
-# The main loop remains here for clarity.
-# ============================================================
-
-import asyncio
 import pygame
-import pymunk
+import sys
+import asyncio  # FIXED: Added for web browser loading compatibility
 from settings import *
 
-from players.player import Player
-from stages.stage import create_stage
-from systems import combat
-from ui import hud
-from attacks import DEFAULT_ATTACKS
-from data import GAME_CONFIG
-
-
-def key_constant(key_name):
-    """Convert a config key name into a pygame key constant."""
-    if not key_name:
-        return None
-    normalized = key_name.strip().lower().replace(" ", "_")
-    return getattr(pygame, f"K_{normalized}", None)
-
-
-async def main():
+async def main():  # FIXED: Wrapped game loop in async environment
+    # Initialize basic display
     pygame.init()
 
-    # Create the display surface, window title, and font for HUD text.
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     pygame.display.set_caption(TITLE)
+
+    # FIXED: Moved font configuration inside the async loop initialization step
     ui_font = pygame.font.SysFont("Arial", 28)
+
+    # Frame rate controller
     clock = pygame.time.Clock()
 
-    # We use asyncio.sleep(0) at the end of each loop to yield control and
-    # keep the event loop responsive.
+    # --- GAME OBJECTS & STAGE SETUP ---
+    stage_rect = pygame.Rect(240, 500, 800, 50)
+    
+    # Ledge Grabbing Rectangles (Left and Right corners of the stage)
+    LEDGE_WIDTH, LEDGE_HEIGHT = 15, 15
+    left_ledge = pygame.Rect(stage_rect.left - 5, stage_rect.top, LEDGE_WIDTH, LEDGE_HEIGHT)
+    right_ledge = pygame.Rect(stage_rect.right - 10, stage_rect.top, LEDGE_WIDTH, LEDGE_HEIGHT)
 
-    stage_rect, left_ledge, right_ledge = create_stage()
+    # Player 1 Profile (WASD Character)
+    p1_rect = pygame.Rect(350, 300, 50, 60)
+    p1_color = P1_COLOR
+    p1_x = float(p1_rect.x)
+    p1_y = float(p1_rect.y)
 
-    # Build the physics world using pymunk. We use a step of `1` per frame so
-    # the physics units remain compatible with the existing per-frame movement
-    # values already encoded in the game.
-    space = pymunk.Space()
-    space.gravity = (0, GRAVITY)
+    # Player 2 Profile (IJKL Character)
+    p2_rect = pygame.Rect(880, 300, 50, 60)
+    p2_color = P2_COLOR
+    p2_x = float(p2_rect.x)
+    p2_y = float(p2_rect.y)
 
-    ground_shape = pymunk.Segment(
-        space.static_body,
-        (stage_rect.left, stage_rect.top),
-        (stage_rect.right, stage_rect.top),
-        0,
-    )
-    ground_shape.friction = 1.0
-    ground_shape.elasticity = 0.0
-    space.add(ground_shape)
+    # --- PLAYER VELOCITY & TERMINAL CONFIGURATION ---
+    p1_y_velocity = 0.0
+    p2_y_velocity = 0.0
+  
+    # Double Jump Configuration
+    p1_jumps_left = 2
+    p2_jumps_left = 2
 
-    p1 = Player(
-        GAME_CONFIG["players"]["p1"]["start_x"],
-        GAME_CONFIG["players"]["p1"]["start_y"],
-        tuple(GAME_CONFIG["players"]["p1"]["color"]),
-    )
-    p2 = Player(
-        GAME_CONFIG["players"]["p2"]["start_x"],
-        GAME_CONFIG["players"]["p2"]["start_y"],
-        tuple(GAME_CONFIG["players"]["p2"]["color"]),
-    )
+    # Facing Directions (-1 = Left, 1 = Right)
+    p1_facing = 1
+    p2_facing = -1
 
-    def create_player_body(player):
-        # Use a box-shaped physics body for player movement and stage collision.
-        mass = 1.0
-        size = (PLAYER_WIDTH, PLAYER_HEIGHT)
-        moment = pymunk.inf
-        body = pymunk.Body(mass, moment)
-        body.position = player.x + PLAYER_WIDTH / 2, player.y + PLAYER_HEIGHT / 2
-        shape = pymunk.Poly.create_box(body, size)
-        shape.friction = 1.0
-        shape.elasticity = 0.0
-        space.add(body, shape)
-        player.body = body
-        player.shape = shape
+    # Attack Timers & Multi-Hit Prevention Flags
+    p1_attack_frames = 0
+    p2_attack_frames = 0
+    p1_has_hit = False
+    p2_has_hit = False
 
-    create_player_body(p1)
-    create_player_body(p2)
+    # Hitbox Dimensions
 
-    # Attach shared attack data to both players.
-    p1.attack_set = DEFAULT_ATTACKS
-    p2.attack_set = DEFAULT_ATTACKS
-    p1.current_attack = None
-    p2.current_attack = None
+    p1_hitbox = None
+    p2_hitbox = None
 
-    # Keep the integer collision rect in sync with the physics body position.
-    def sync_player_rect(player):
-        if getattr(player, 'body', None):
-            player.x, player.y = player.body.position
-            player.rect.x = int(player.x - player.rect.width / 2)
-            player.rect.y = int(player.y - player.rect.height / 2)
+    # Knockback Physics Forces
+    p1_kb_x = 0.0
+    p1_kb_y = 0.0 
+    p2_kb_x = 0.0
+    p2_kb_y = 0.0
 
-    sync_player_rect(p1)
-    sync_player_rect(p2)
+    # System 3 & 4: DI Strength & Ledge State Trackers
+    p1_is_hanging = False
+    p1_ledge_cooldown = 0
+    p2_is_hanging = False
+    p2_ledge_cooldown = 0
 
+    # --- DAMAGE & STOCK TRACKING ---
+    p1_stocks = 3
+    p2_stocks = 3
+    p1_damage = 0
+    p2_damage = 0
+
+    # --- STATE MACHINE ARCHITECTURE ---
     STATE_IDLE = 0
     STATE_RUNNING = 1
     STATE_JUMPING = 2
@@ -121,332 +89,378 @@ async def main():
     p1_state = STATE_IDLE
     p2_state = STATE_IDLE
 
-    p1_controls = GAME_CONFIG["controls"]["p1"]
-    p2_controls = GAME_CONFIG["controls"]["p2"]
-
-    p1_left_key = key_constant(p1_controls["left"])
-    p1_right_key = key_constant(p1_controls["right"])
-    p1_jump_key = key_constant(p1_controls["jump"])
-    p1_shield_key = key_constant(p1_controls["shield"])
-    p1_attack_jab_key = key_constant(p1_controls["attack_jab"])
-    p1_attack_uppercut_key = key_constant(p1_controls["attack_uppercut"])
-
-    p2_left_key = key_constant(p2_controls["left"])
-    p2_right_key = key_constant(p2_controls["right"])
-    p2_jump_key = key_constant(p2_controls["jump"])
-    p2_shield_key = key_constant(p2_controls["shield"])
-    p2_attack_jab_key = key_constant(p2_controls["attack_jab"])
-    p2_attack_uppercut_key = key_constant(p2_controls["attack_uppercut"])
-
+    # Match state tracker
     game_active = True
     winner_text = ""
+    p1_hitstun = 0
+    p2_hitstun = 0
+    p1_invincible_frames = 0
+    p2_invincible_frames = 0
 
-    # Main loop
+    # SHIELD HEALTH & STUN ENGINE ---
+    p1_is_shielding = False
+    p2_is_shielding = False
+    p1_shield_hp = 100.0
+    p2_shield_hp = 100.0
+    p1_shield_stun = 0
+    p2_shield_stun = 0
+    
+    # Core Game Loop
     while True:
+        # 1. Event Handling (Window Controls & Single-Tap Actions)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                # User closed the window: stop the game cleanly.
                 pygame.quit()
-                return
+                return  # FIXED: Orderly thread yield termination for async safety
 
             if event.type == pygame.KEYDOWN:
+                # Check for instant round reset button
                 if event.key == pygame.K_r:
-                    # Reset match state and respawn both players.
-                    p1.stocks = 3
-                    p2.stocks = 3
-                    p1.damage = 0
-                    p2.damage = 0
-                    p1.reset_position(350, 300)
-                    p2.reset_position(880, 300)
-                    p1.attack_frames = 0
-                    p2.attack_frames = 0
-                    p1.has_hit = False
-                    p2.has_hit = False
-                    p1.is_hanging = False
-                    p2.is_hanging = False
-                    p1.shield_hp = MAX_SHIELD_HP
-                    p2.shield_hp = MAX_SHIELD_HP
-                    p1.shield_stun = 0
-                    p2.shield_stun = 0
-                    p1.hitstun = 0
-                    p2.hitstun = 0
-                    p1.invincible_frames = 0
-                    p2.invincible_frames = 0
+                    p1_stocks = 3
+                    p2_stocks = 3
+                    p1_damage = 0
+                    p2_damage = 0
+                    p1_x, p1_y = 350.0, 300.0
+                    p2_x, p2_y = 880.0, 300.0
+                    p1_kb_x, p1_kb_y = 0.0, 0.0
+                    p2_kb_x, p2_kb_y = 0.0, 0.0
+                    p1_y_velocity = 0.0
+                    p2_y_velocity = 0.0
+                    p1_jumps_left = 2
+                    p2_jumps_left = 2
+                    p1_attack_frames = 0
+                    p2_attack_frames = 0
+                    p1_has_hit = False
+                    p2_has_hit = False
+                    p1_is_hanging = False
+                    p2_is_hanging = False
                     game_active = True
                     winner_text = ""
+                    p1_shield_hp = 100.0
+                    p2_shield_hp = 100.0
+                    p1_shield_stun = 0
+                    p2_shield_stun = 0
+                    p1_hitstun = 0
+                    p2_hitstun = 0
+                    p1_invincible_frames = 0
+                    p2_invincible_frames = 0
 
                 if game_active:
-                    # Only allow player actions if the match is active.
-                    # This prevents input after the game has ended.
+                    # System 4: Ledge Escape mechanic
+                    if p1_is_hanging and event.key == pygame.K_s:
+                        p1_is_hanging = False
+                        p1_ledge_cooldown = 30
+                    elif not p1_is_hanging and event.key == pygame.K_w and p1_jumps_left > 0:
+                        p1_y_velocity = -JUMP_POWER
+                        p1_jumps_left -= 1
 
-                    # Player 1: ledge climb / drop or normal jump
-                    if p1.is_hanging:
-                        # While hanging: tap jump to jump away from the ledge,
-                        # press drop to fall. Climb behavior is not bound to tap.
-                        if event.key == pygame.K_s:  # drop from ledge
-                            p1.is_hanging = False
-                            p1.ledge_cooldown = 30
-                            p1.set_vertical_velocity(4.0)
-                        elif event.key == pygame.K_w:  # tap jump -> jump out of hang
-                            # Jump out of the ledge: give upward and outward impulse
-                            p1.is_hanging = False
-                            p1.ledge_cooldown = 30
-                            p1.set_vertical_velocity(-JUMP_POWER)
-                            if getattr(p1, 'hang_side', None) == 'left':
-                                p1.kb_x = -HANG_JUMP_HORIZONTAL
-                                p1.facing = -1
-                            else:
-                                p1.kb_x = HANG_JUMP_HORIZONTAL
-                                p1.facing = 1
-                            # consume a jump so double-jump logic remains consistent
-                            p1.jumps_left = max(0, p1.jumps_left - 1)
-                    else:
-                        # Normal jump when not hanging.
-                        # If the player is currently in the spin animation from an uppercut,
-                        # pressing jump cancels the spin and allows a normal jump.
-                        if event.key == p1_jump_key:
-                            if getattr(p1, 'is_spinning', False) and p1.jumps_left > 0:
-                                p1.is_spinning = False
-                                p1.spin_frames = 0
-                                p1.spin_angle = 0.0
-                                p1.slam_ready = False
-                                p1.set_vertical_velocity(-JUMP_POWER)
-                                p1.jumps_left -= 1
-                            elif getattr(p1, 'prone', False):
-                                # Hop up from stomach to land on feet
-                                p1.prone = False
-                                p1.set_vertical_velocity(-JUMP_POWER * 0.7)
-                                p1.jumps_left = max(0, p1.jumps_left - 1)
-                            elif p1.jumps_left > 0:
-                                p1.set_vertical_velocity(-JUMP_POWER)
-                                p1.jumps_left -= 1
+                    if p2_is_hanging and event.key == pygame.K_k:
+                        p2_is_hanging = False
+                        p2_ledge_cooldown = 30
+                    elif not p2_is_hanging and event.key == pygame.K_i and p2_jumps_left > 0:
+                        p2_y_velocity = -JUMP_POWER
+                        p2_jumps_left -= 1
 
-                    # Player 2: ledge climb / drop or normal jump (mirrored keys)
-                    if p2.is_hanging:
-                        if event.key == p2_shield_key:  # drop from ledge
-                            p2.is_hanging = False
-                            p2.ledge_cooldown = 30
-                            p2.set_vertical_velocity(4.0)
-                        elif event.key == p2_jump_key:  # tap jump -> jump out
-                            p2.is_hanging = False
-                            p2.ledge_cooldown = 30
-                            p2.set_vertical_velocity(-JUMP_POWER)
-                            if getattr(p2, 'hang_side', None) == 'left':
-                                p2.kb_x = -HANG_JUMP_HORIZONTAL
-                                p2.facing = -1
-                            else:
-                                p2.kb_x = HANG_JUMP_HORIZONTAL
-                                p2.facing = 1
-                            p2.jumps_left = max(0, p2.jumps_left - 1)
-                    else:
-                        if event.key == p2_jump_key:
-                            if getattr(p2, 'is_spinning', False) and p2.jumps_left > 0:
-                                p2.is_spinning = False
-                                p2.spin_frames = 0
-                                p2.spin_angle = 0.0
-                                p2.slam_ready = False
-                                p2.set_vertical_velocity(-JUMP_POWER)
-                                p2.jumps_left -= 1
-                            elif getattr(p2, 'prone', False):
-                                p2.prone = False
-                                p2.set_vertical_velocity(-JUMP_POWER * 0.7)
-                                p2.jumps_left = max(0, p2.jumps_left - 1)
-                            elif p2.jumps_left > 0:
-                                p2.set_vertical_velocity(-JUMP_POWER)
-                                p2.jumps_left -= 1
+                    if event.key == pygame.K_f and p1_attack_frames == 0 and not p1_is_hanging:
+                        p1_attack_frames = ATTACK_DURATION
+                        p1_has_hit = False
 
-                    # Attacks
-                    if event.key == p1_attack_jab_key and p1.attack_frames == 0 and p1.attack_cooldown == 0 and not p1.is_hanging:
-                        p1.current_attack = p1.attack_set["jab"]
-                        p1.attack_frames = p1.current_attack["duration"]
-                        p1.has_hit = False
-                    if event.key == p1_attack_uppercut_key and p1.attack_frames == 0 and p1.attack_cooldown == 0 and not p1.is_hanging:
-                        p1.current_attack = p1.attack_set["uppercut"]
-                        p1.attack_frames = p1.current_attack["duration"]
-                        p1.has_hit = False
-                        p1.attack_cooldown = p1.current_attack.get("cooldown", 0)
+                    if event.key == pygame.K_h and p2_attack_frames == 0 and not p2_is_hanging:
+                        p2_attack_frames = ATTACK_DURATION
+                        p2_has_hit = False
 
-                    if event.key == p2_attack_jab_key and p2.attack_frames == 0 and p2.attack_cooldown == 0 and not p2.is_hanging:
-                        p2.current_attack = p2.attack_set["jab"]
-                        p2.attack_frames = p2.current_attack["duration"]
-                        p2.has_hit = False
-                    if event.key == p2_attack_uppercut_key and p2.attack_frames == 0 and p2.attack_cooldown == 0 and not p2.is_hanging:
-                        p2.current_attack = p2.attack_set["uppercut"]
-                        p2.attack_frames = p2.current_attack["duration"]
-                        p2.has_hit = False
-                        p2.attack_cooldown = p2.current_attack.get("cooldown", 0)
-
-        # Game logic
-        # `get_pressed()` returns the current keyboard state for held keys.
+        # 2. Game Logic Updates
         keys = pygame.key.get_pressed()
 
-        def is_airborne(player):
-            if getattr(player, 'body', None):
-                return abs(player.body.velocity.y) > 0.1
-            return False
+        if p1_is_hanging: p1_state = STATE_HANGING
+        elif p1_hitstun > 0: p1_state = STATE_HITSTUN
+        elif p1_is_shielding: p1_state = STATE_SHIELDING
+        elif p1_attack_frames > 0: p1_state = STATE_ATTACKING
+        elif p1_y_velocity != 0: p1_state = STATE_JUMPING
+        elif keys[pygame.K_a] or keys[pygame.K_d]: p1_state = STATE_RUNNING
+        else: p1_state = STATE_IDLE
 
-        # Update simple action states for UI and decision-making.
-        # The order is important: hanging and hitstun override movement.
-        p1_state = STATE_HANGING if p1.is_hanging else (
-            STATE_HITSTUN if p1.hitstun > 0 else (
-            STATE_SHIELDING if p1.is_shielding else (
-            STATE_ATTACKING if p1.attack_frames > 0 else (
-            STATE_JUMPING if is_airborne(p1) else (
-            STATE_RUNNING if (keys[pygame.K_a] or keys[pygame.K_d]) else STATE_IDLE)))))
-
-        p2_state = STATE_HANGING if p2.is_hanging else (
-            STATE_HITSTUN if p2.hitstun > 0 else (
-            STATE_SHIELDING if p2.is_shielding else (
-            STATE_ATTACKING if p2.attack_frames > 0 else (
-            STATE_JUMPING if is_airborne(p2) else (
-            STATE_RUNNING if (keys[pygame.K_j] or keys[pygame.K_l]) else STATE_IDLE)))))
+        if p2_is_hanging: p2_state = STATE_HANGING
+        elif p2_hitstun > 0: p2_state = STATE_HITSTUN
+        elif p2_is_shielding: p2_state = STATE_SHIELDING
+        elif p2_attack_frames > 0: p2_state = STATE_ATTACKING
+        elif p2_y_velocity != 0: p2_state = STATE_JUMPING
+        elif keys[pygame.K_j] or keys[pygame.K_l]: p2_state = STATE_RUNNING
+        else: p2_state = STATE_IDLE
 
         if game_active:
-            # Timers
-            # These counters decrement each frame to implement delays, invulnerability,
-            # and ledge re-grab prevention.
-            if p1.invincible_frames > 0:
-                p1.invincible_frames -= 1
-            if p2.invincible_frames > 0:
-                p2.invincible_frames -= 1
-            if p1.ledge_cooldown > 0:
-                p1.ledge_cooldown -= 1
-            if p2.ledge_cooldown > 0:
-                p2.ledge_cooldown -= 1
-            if p1.attack_cooldown > 0:
-                p1.attack_cooldown -= 1
-            if p2.attack_cooldown > 0:
-                p2.attack_cooldown -= 1
-            # Spin frame countdown and visual rotation update
-            if p1.spin_frames > 0:
-                p1.spin_frames -= 1
-                p1.spin_angle = (p1.spin_angle + 4.0) % 360.0
-                if p1.spin_frames == 0:
-                    p1.is_spinning = False
-                    p1.spin_angle = 0.0
-            if p2.spin_frames > 0:
-                p2.spin_frames -= 1
-                p2.spin_angle = (p2.spin_angle + 4.0) % 360.0
-                if p2.spin_frames == 0:
-                    p2.is_spinning = False
-                    p2.spin_angle = 0.0
+            if p1_invincible_frames > 0: p1_invincible_frames -= 1
+            if p2_invincible_frames > 0: p2_invincible_frames -= 1
+            if p1_ledge_cooldown > 0: p1_ledge_cooldown -= 1
+            if p2_ledge_cooldown > 0: p2_ledge_cooldown -= 1
 
-            # Update slam particles for both players
-            for p in (p1, p2):
-                new_particles = []
-                for part in getattr(p, 'slam_particles', []):
-                    part['x'] += part['vx']
-                    part['y'] += part['vy']
-                    part['vy'] += GRAVITY * 0.4
-                    part['life'] -= 1
-                    if part['life'] > 0:
-                        new_particles.append(part)
-                p.slam_particles = new_particles
+            # === SYSTEM 3: ACTIVE DIRECTIONAL INFLUENCE (DI) ENGINE ===
+            if p1_hitstun > 0:
+                if keys[pygame.K_a]: p1_kb_x -= DI_STRENGTH
+                if keys[pygame.K_d]: p1_kb_x += DI_STRENGTH
+                if keys[pygame.K_w]: p1_kb_y -= DI_STRENGTH
+                if keys[pygame.K_s]: p1_kb_y += DI_STRENGTH
 
-                if p.sprite_frames:
-                    p.sprite_index = (p.sprite_index + p.sprite_anim_speed) % len(p.sprite_frames)
+            if p2_hitstun > 0:
+                if keys[pygame.K_j]: p2_kb_x -= DI_STRENGTH
+                if keys[pygame.K_l]: p2_kb_x += DI_STRENGTH
+                if keys[pygame.K_i]: p2_kb_y -= DI_STRENGTH
+                if keys[pygame.K_k]: p2_kb_y += DI_STRENGTH
 
-            # DI (Directional Influence)
-            # Allows players to influence knockback direction while in hitstun.
-            combat.apply_DI(p1, keys, pygame.K_a, pygame.K_d, pygame.K_w, pygame.K_s)
-            combat.apply_DI(p2, keys, pygame.K_j, pygame.K_l, pygame.K_i, pygame.K_k)
+            # === PLAYER 1 SHIELD, STUN, & STANDARD MOVEMENT ===
+            if p1_shield_stun > 0:
+                p1_shield_stun -= 1
+                p1_is_shielding = False
+            elif p1_hitstun > 0:
+                p1_hitstun -= 1
+                p1_is_shielding = False
+            elif keys[pygame.K_s] and p1_shield_hp > 0 and not p1_is_hanging:
+                p1_is_shielding = True
+                p1_shield_hp -= SHIELD_DRAIN_SPEED
+                if p1_shield_hp <= 0:
+                    p1_shield_hp = 0
+                    p1_shield_stun = 120
+                    p1_is_shielding = False
+            else:
+                p1_is_shielding = False
 
-            # Shielding and movement processing handles input and block state.
-            combat.shield_and_movement(p1, keys, pygame.K_a, pygame.K_d, pygame.K_s)
-            combat.shield_and_movement(p2, keys, pygame.K_j, pygame.K_l, pygame.K_k)
+            if p1_shield_hp < MAX_SHIELD_HP and not p1_is_shielding:
+                p1_shield_hp += SHIELD_REGEN_SPEED
 
-            # When using pymunk, player position is driven by the physics body.
-            # The character rectangle and game state are synchronized after the
-            # physics step below.
+            if not p1_is_shielding and p1_shield_stun == 0 and p1_hitstun == 0 and not p1_is_hanging:
+                if keys[pygame.K_a]:
+                    p1_x -= PLAYER_SPEED
+                    p1_facing = -1
+                if keys[pygame.K_d]:
+                    p1_x += PLAYER_SPEED
+                    p1_facing = 1
 
-            # Update attacks and resolve any collisions with opponents.
-            p1_hitbox, p2_hitbox, p1_attack_ref, p2_attack_ref = combat.tick_attacks(p1, p2)
-            combat.handle_hits(p1, p2, p1_hitbox, p2_hitbox, p1_attack_ref, p2_attack_ref)
+            # === PLAYER 2 SHIELD, STUN, & STANDARD MOVEMENT ===
+            if p2_shield_stun > 0:
+                p2_shield_stun -= 1
+                p2_is_shielding = False
+            elif p2_hitstun > 0:
+                p2_hitstun -= 1
+                p2_is_shielding = False
+            elif keys[pygame.K_k] and p2_shield_hp > 0 and not p2_is_hanging:
+                p2_is_shielding = True
+                p2_shield_hp -= SHIELD_DRAIN_SPEED
+                if p2_shield_hp <= 0:
+                    p2_shield_hp = 0
+                    p2_shield_stun = 120
+                    p2_is_shielding = False
+            else:
+                p2_is_shielding = False
 
-            # Clear finished attacks after hit resolution so attack metadata
-            # remains available during handle_hits. Reset `has_hit` for the
-            # next attack cycle when the attack fully finishes.
-            if getattr(p1, 'attack_frames', 0) <= 0:
-                p1.current_attack = None
-                p1.has_hit = False
-            if getattr(p2, 'attack_frames', 0) <= 0:
-                p2.current_attack = None
-                p2.has_hit = False
+            if p2_shield_hp < MAX_SHIELD_HP and not p2_is_shielding:
+                p2_shield_hp += SHIELD_REGEN_SPEED
 
-            # Step the physics simulation. We use a time step of 1 to keep
-            # the pymunk simulation in the same per-frame unit system as the
-            # rest of the game.
-            space.step(1)
+            if not p2_is_shielding and p2_shield_stun == 0 and p2_hitstun == 0 and not p2_is_hanging:
+                if keys[pygame.K_j]:
+                    p2_x -= PLAYER_SPEED
+                    p2_facing = -1
+                if keys[pygame.K_l]:
+                    p2_x += PLAYER_SPEED
+                    p2_facing = 1
 
-            # Update player rectangles from the physics bodies.
-            sync_player_rect(p1)
-            sync_player_rect(p2)
+            p1_rect.x = int(p1_x)
+            p2_rect.x = int(p2_x)
 
-            def update_grounded(player):
-                if getattr(player, 'shape', None):
-                    collided = player.shape.shapes_collide(ground_shape).points
-                    if collided:
-                        player.jumps_left = 2
-                        if player.slam_ready:
-                            player.slam_ready = False
-                            player.is_spinning = False
-                            player.spin_frames = 0
-                            player.spin_angle = 0.0
-                            player.prone = True
-                            if getattr(player, 'body', None):
-                                player.body.velocity = (player.body.velocity.x, float(player.slam_strength * 0.5))
-                            player.slam_strength = 0.0
-                    return bool(collided)
-                return False
+            # --- STEP 2: TICK DOWN ATTACK TIMERS & GENERATE HITBOX RECTANGLES ---
+            p1_hitbox = None
+            if p1_attack_frames > 0:
+                p1_attack_frames -= 1
+                p1_center_y = p1_rect.y + (p1_rect.height // 2)
+                if p1_facing == 1:
+                    p1_hitbox = pygame.Rect(p1_rect.right, p1_center_y - (HITBOX_HEIGHT // 2), HITBOX_WIDTH, HITBOX_HEIGHT)
+                else:
+                    p1_hitbox = pygame.Rect(p1_rect.left - HITBOX_WIDTH, p1_center_y - (HITBOX_HEIGHT // 2), HITBOX_WIDTH, HITBOX_HEIGHT)
 
-            update_grounded(p1)
-            update_grounded(p2)
+            p2_hitbox = None
+            if p2_attack_frames > 0:
+                p2_attack_frames -= 1
+                p2_center_y = p2_rect.y + (p2_rect.height // 2)
+                if p2_facing == 1:
+                    p2_hitbox = pygame.Rect(p2_rect.right, p2_center_y - (HITBOX_HEIGHT // 2), HITBOX_WIDTH, HITBOX_HEIGHT)
+                else:
+                    p2_hitbox = pygame.Rect(p2_rect.left - HITBOX_WIDTH, p2_center_y - (HITBOX_HEIGHT // 2), HITBOX_WIDTH, HITBOX_HEIGHT)
 
-            # Blast zones
-            # If a player leaves the visible play area, they are knocked out and respawn.
+            # --- STEP 3: COMBAT HIT DETECTION ---
+            if p1_hitbox and p1_hitbox.colliderect(p2_rect) and not p1_has_hit and p2_invincible_frames == 0:
+                p2_damage += 12
+                p2_kb_x = float((KNOCKBACK_force + (p2_damage // 2)) * p1_facing)
+                p2_kb_y = -8.5
+                p1_has_hit = True
+                p2_is_hanging = False
+                p2_hitstun = int(abs(p2_kb_x) * 0.75)
+
+            if p2_hitbox and p2_hitbox.colliderect(p1_rect) and not p2_has_hit and p1_invincible_frames == 0:
+                p1_damage += 12
+                p1_kb_x = float((KNOCKBACK_force + (p1_damage // 2)) * p2_facing)
+                p1_kb_y = -8.5
+                p2_has_hit = True
+                p1_is_hanging = False
+                p1_hitstun = int(abs(p1_kb_x) * 0.75)
+
+            # === SYSTEM 2: HITBOX INTERPOLATION ===
+            max_step = max(1, int(max(abs(p1_kb_x), abs(p1_kb_y), abs(p2_kb_x), abs(p2_kb_y))))
+            if max_step > 20: max_step = 20  
+            
+            for _ in range(max_step):
+                p1_x += p1_kb_x / max_step
+                p1_y += p1_kb_y / max_step
+                p2_x += p2_kb_x / max_step
+                p2_y += p2_kb_y / max_step
+                p1_rect.x, p1_rect.y = int(p1_x), int(p1_y)
+                p2_rect.x, p2_rect.y = int(p2_x), int(p2_y)
+
+                if p1_rect.colliderect(stage_rect) and p1_kb_y >= 0:
+                    if p1_rect.bottom - (p1_kb_y / max_step) <= stage_rect.top + 10:
+                        p1_rect.bottom = stage_rect.top
+                        p1_y = float(p1_rect.y)
+                        p1_kb_y = 0.0
+
+                if p2_rect.colliderect(stage_rect) and p2_kb_y >= 0:
+                    if p2_rect.bottom - (p2_kb_y / max_step) <= stage_rect.top + 10:
+                        p2_rect.bottom = stage_rect.top
+                        p2_y = float(p2_rect.y)
+                        p2_kb_y = 0.0
+
+            p1_kb_x *= KNOCKBACK_DECAY  # FIXED: Restored variable syntax "Y"
+            p1_kb_y *= KNOCKBACK_DECAY
+            p2_kb_x *= KNOCKBACK_DECAY
+            p2_kb_y *= KNOCKBACK_DECAY
+            if abs(p1_kb_x) < 0.1: p1_kb_x = 0.0
+            if abs(p1_kb_y) < 0.1: p1_kb_y = 0.0
+            if abs(p2_kb_x) < 0.1: p2_kb_x = 0.0
+            if abs(p2_kb_y) < 0.1: p2_kb_y = 0.0
+
+            # --- STEP 5: PERMANENT SOLIDITY ENGINE ---
+            if p1_rect.colliderect(p2_rect) and not p1_is_hanging and not p2_is_hanging:
+                overlap_left = p1_rect.right - p2_rect.left
+                overlap_right = p2_rect.right - p1_rect.left
+                if overlap_left < overlap_right:
+                    push = overlap_left // 2
+                    p1_x -= push
+                    p2_x += push
+                    if p1_kb_x > 0: p1_kb_x = 0.0
+                    if p2_kb_x < 0: p2_kb_x = 0.0
+                else:
+                    push = overlap_right // 2
+                    p1_x += push
+                    p2_x -= push
+                    if p1_kb_x < 0: p1_kb_x = 0.0
+                    if p2_kb_x > 0: p2_kb_x = 0.0
+
+            # === SYSTEM 4 & 5: RECOVERY INTERSECT, FAST FALL, & GRAVITY PROCESSING ===
+            if not p1_is_hanging:
+                p1_y_velocity += GRAVITY
+                current_cap = FAST_FALL_SPEED if (keys[pygame.K_s] and p1_y_velocity > 0) else MAX_FALL_SPEED
+                if p1_y_velocity > current_cap: p1_y_velocity = current_cap
+                p1_y += p1_y_velocity
+                p1_rect.y = int(p1_y)
+
+                if p1_y_velocity >= 0 and p1_hitstun == 0 and p1_ledge_cooldown == 0:
+                    if p1_rect.colliderect(left_ledge):
+                        p1_is_hanging = True
+                        p1_x, p1_y = float(left_ledge.x - 15), float(left_ledge.y)
+                        p1_y_velocity, p1_kb_x, p1_kb_y = 0.0, 0.0, 0.0
+                        p1_jumps_left = 2
+                    elif p1_rect.colliderect(right_ledge):
+                        p1_is_hanging = True
+                        p1_x, p1_y = float(right_ledge.x - 20), float(right_ledge.y)
+                        p1_y_velocity, p1_kb_x, p1_kb_y = 0.0, 0.0, 0.0
+                        p1_jumps_left = 2
+
+            if not p2_is_hanging:
+                p2_y_velocity += GRAVITY
+                current_cap = FAST_FALL_SPEED if (keys[pygame.K_k] and p2_y_velocity > 0) else MAX_FALL_SPEED
+                if p2_y_velocity > current_cap: p2_y_velocity = current_cap
+                p2_y += p2_y_velocity
+                p2_rect.y = int(p2_y)
+
+                if p2_y_velocity >= 0 and p2_hitstun == 0 and p2_ledge_cooldown == 0:
+                    if p2_rect.colliderect(left_ledge):
+                        p2_is_hanging = True
+                        p2_x, p2_y = float(left_ledge.x - 15), float(left_ledge.y)
+                        p2_y_velocity, p2_kb_x, p2_kb_y = 0.0, 0.0, 0.0
+                        p2_jumps_left = 2
+                    elif p2_rect.colliderect(right_ledge):
+                        p2_is_hanging = True
+                        p2_x, p2_y = float(right_ledge.x - 20), float(right_ledge.y)
+                        p2_y_velocity, p2_kb_x, p2_kb_y = 0.0, 0.0, 0.0
+                        p2_jumps_left = 2
+
+            if p1_rect.colliderect(stage_rect) and p1_y_velocity >= 0:
+                p1_rect.bottom = stage_rect.top
+                p1_y = float(p1_rect.y)
+                p1_y_velocity = 0.0
+                p1_jumps_left = 2
+
+            if p2_rect.colliderect(stage_rect) and p2_y_velocity >= 0:
+                p2_rect.bottom = stage_rect.top
+                p2_y = float(p2_rect.y)
+                p2_y_velocity = 0.0
+                p2_jumps_left = 2
+
+            # === SYSTEM 1: BLAST ZONE PARAMETERS ===
             DEAD_ZONE_LEFT, DEAD_ZONE_RIGHT = -100, SCREEN_WIDTH + 100
             DEAD_ZONE_BOTTOM, DEAD_ZONE_TOP = SCREEN_HEIGHT + 100, -100
 
-            if p1.rect.x < DEAD_ZONE_LEFT or p1.rect.x > DEAD_ZONE_RIGHT or p1.rect.y > DEAD_ZONE_BOTTOM or (p1.rect.y < DEAD_ZONE_TOP and p1.hitstun > 0):
-                p1.stocks -= 1
-                p1.damage = 0
-                p1.reset_position(440, 150)
-                p1.kb_x = 0.0
-                p1.kb_y = 0.0
-                if getattr(p1, 'body', None):
-                    p1.body.velocity = (0.0, 0.0)
-                p1.is_hanging = False
-                p1.invincible_frames = 90
-                p1.attack_cooldown = 0
-                p1.is_spinning = False
-                p1.spin_frames = 0
-                p1.slam_ready = False
-                p1.slam_strength = 0.0
+            if p1_rect.x < DEAD_ZONE_LEFT or p1_rect.x > DEAD_ZONE_RIGHT or p1_rect.y > DEAD_ZONE_BOTTOM or (p1_rect.y < DEAD_ZONE_TOP and p1_hitstun > 0):
+                p1_stocks -= 1
+                p1_damage = 0
+                p1_x, p1_y = 440.0, 150.0
+                p1_y_velocity, p1_kb_x, p1_kb_y = 0.0, 0.0, 0.0
+                p1_is_hanging = False
+                p1_invincible_frames = 90
 
-            if p2.rect.x < DEAD_ZONE_LEFT or p2.rect.x > DEAD_ZONE_RIGHT or p2.rect.y > DEAD_ZONE_BOTTOM or (p2.rect.y < DEAD_ZONE_TOP and p2.hitstun > 0):
-                p2.stocks -= 1
-                p2.damage = 0
-                p2.reset_position(790, 150)
-                p2.kb_x = 0.0
-                p2.kb_y = 0.0
-                if getattr(p2, 'body', None):
-                    p2.body.velocity = (0.0, 0.0)
-                p2.is_hanging = False
-                p2.invincible_frames = 90
-                p2.attack_cooldown = 0
-                p2.is_spinning = False
-                p2.spin_frames = 0
-                p2.slam_ready = False
-                p2.slam_strength = 0.0
-        else:
-            p1_hitbox = None
-            p2_hitbox = None
+            if p2_rect.x < DEAD_ZONE_LEFT or p2_rect.x > DEAD_ZONE_RIGHT or p2_rect.y > DEAD_ZONE_BOTTOM or (p2_rect.y < DEAD_ZONE_TOP and p2_hitstun > 0):
+                p2_stocks -= 1
+                p2_damage = 0
+                p2_x, p2_y = 790.0, 150.0
+                p2_y_velocity, p2_kb_x, p2_kb_y = 0.0, 0.0, 0.0
+                p2_is_hanging = False
+                p2_invincible_frames = 90
 
-        # Draw
-        hud.draw(screen, ui_font, p1, p2, p1_hitbox, p2_hitbox, stage_rect, game_active, winner_text)
+            if p1_stocks <= 0: game_active = False; winner_text = "PLAYER 2 WINS!"
+            if p2_stocks <= 0: game_active = False; winner_text = "PLAYER 1 WINS!"
 
+        # 3. Drawing / Rendering
+        screen.fill((20, 20, 25))
+        pygame.draw.rect(screen, STAGE_COLOR, stage_rect)
+
+        if p1_shield_stun > 0 and (p1_shield_stun // 4) % 2 == 0: pygame.draw.rect(screen, (255, 255, 255), p1_rect)
+        elif p1_invincible_frames > 0 and (p1_invincible_frames // 4) % 2 == 0: pygame.draw.rect(screen, (255, 215, 0), p1_rect)
+        else: pygame.draw.rect(screen, p1_color, p1_rect)
+
+        if p2_shield_stun > 0 and (p2_shield_stun // 4) % 2 == 0: pygame.draw.rect(screen, (255, 255, 255), p2_rect)
+        elif p2_invincible_frames > 0 and (p2_invincible_frames // 4) % 2 == 0: pygame.draw.rect(screen, (255, 215, 0), p2_rect)
+        else: pygame.draw.rect(screen, p2_color, p2_rect)
+
+        if p1_hitbox: pygame.draw.rect(screen, (255, 255, 0), p1_hitbox)
+        if p2_hitbox: pygame.draw.rect(screen, (255, 255, 0), p2_hitbox)
+
+        if p1_is_shielding:
+            p1_center = (p1_rect.x + p1_rect.width // 2, p1_rect.y + p1_rect.height // 2)
+            pygame.draw.circle(screen, (0, 255, 255), p1_center, int(20 + (25 * (p1_shield_hp / MAX_SHIELD_HP))), 3)
+
+        if p2_is_shielding:
+            p2_center = (p2_rect.x + p2_rect.width // 2, p2_rect.y + p2_rect.height // 2)
+            pygame.draw.circle(screen, (255, 0, 255), p2_center, int(20 + (25 * (p2_shield_hp / MAX_SHIELD_HP))), 3)
+
+        screen.blit(ui_font.render(f"P1 STOCKS: {p1_stocks} | {p1_damage}%", True, (255, 255, 255)), (50, 30))
+        screen.blit(ui_font.render(f"{p2_damage}% | P2 STOCKS: {p2_stocks}", True, (255, 255, 255)), (950, 30))
+
+        if not game_active:
+            screen.blit(ui_font.render(winner_text, True, (255, 255, 0)), (SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT // 2 - 50))
+            screen.blit(ui_font.render("Press 'R' to Restart Match", True, (150, 150, 150)), (SCREEN_WIDTH // 2 - 140, SCREEN_HEIGHT // 2))
+
+        pygame.display.flip()
         clock.tick(FPS)
+        
+        # FIXED: Removed 1 tab level out of the game_active scope check so web-loops rest on win screens
         await asyncio.sleep(0)
 
-
+# FIXED: Ignition framework key on far left margin
 asyncio.run(main())
