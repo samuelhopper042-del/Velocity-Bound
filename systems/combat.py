@@ -73,13 +73,15 @@ def handle_hits(p1, p2, p1_hitbox, p2_hitbox, p1_attack=None, p2_attack=None):
             p2.shield_hp -= p1_attack["damage"] * 0.5
             if p2.shield_hp < 0:
                 p2.shield_hp = 0
-            p2.apply_knockback(float((p1_attack["knockback"] * 0.25) * p1.facing), -3.0)
+            p2.kb_x = float((p1_attack["knockback"] * 0.25) * p1.facing)
+            p2.kb_y = -3.0
             p2.shield_stun = int(abs(p2.kb_x) * 1.5) + 5
         else:
             p2.damage += p1_attack["damage"]
             if p1_attack.get("vertical_launch"):
                 p2.attack_cooldown = p1_attack.get("cooldown", 0)
-                p2.apply_knockback(float((p1_attack["knockback"] * 0.2) * p1.facing), float(-(p1_attack["knockback"] + (p2.damage // 3))))
+                p2.kb_x = float((p1_attack["knockback"] * 0.2) * p1.facing)
+                p2.kb_y = float(-(p1_attack["knockback"] + (p2.damage // 3)))
                 p2.hitstun = int(max(abs(p2.kb_x), abs(p2.kb_y)) * 0.6)
                 p2.is_spinning = True
                 # Use a large spin frame count so the visual spin persists
@@ -88,7 +90,8 @@ def handle_hits(p1, p2, p1_hitbox, p2_hitbox, p1_attack=None, p2_attack=None):
                 p2.slam_ready = True
                 p2.slam_strength = max(8.0, abs(p2.kb_y) * 0.75)
             else:
-                p2.apply_knockback(float((p1_attack["knockback"] + (p2.damage // 2)) * p1.facing), -8.5)
+                p2.kb_x = float((p1_attack["knockback"] + (p2.damage // 2)) * p1.facing)
+                p2.kb_y = -8.5
                 p2.hitstun = int(abs(p2.kb_x) * 0.75)
         p1.has_hit = True
         p2.is_hanging = False
@@ -102,21 +105,24 @@ def handle_hits(p1, p2, p1_hitbox, p2_hitbox, p1_attack=None, p2_attack=None):
             p1.shield_hp -= p2_attack["damage"] * 0.5
             if p1.shield_hp < 0:
                 p1.shield_hp = 0
-            p1.apply_knockback(float((p2_attack["knockback"] * 0.25) * p2.facing), -3.0)
+            p1.kb_x = float((p2_attack["knockback"] * 0.25) * p2.facing)
+            p1.kb_y = -3.0
             p1.shield_stun = int(abs(p1.kb_x) * 1.5) + 5
         else:
             # Normal hit: add damage percentage and apply knockback.
             p1.damage += p2_attack["damage"]
             if p2_attack.get("vertical_launch"):
                 p1.attack_cooldown = p2_attack.get("cooldown", 0)
-                p1.apply_knockback(float((p2_attack["knockback"] * 0.2) * p2.facing), float(-(p2_attack["knockback"] + (p1.damage // 3))))
+                p1.kb_x = float((p2_attack["knockback"] * 0.2) * p2.facing)
+                p1.kb_y = float(-(p2_attack["knockback"] + (p1.damage // 3)))
                 p1.hitstun = int(max(abs(p1.kb_x), abs(p1.kb_y)) * 0.6)
                 p1.is_spinning = True
                 p1.spin_frames = 99999
                 p1.slam_ready = True
                 p1.slam_strength = max(8.0, abs(p1.kb_y) * 0.75)
             else:
-                p1.apply_knockback(float((p2_attack["knockback"] + (p1.damage // 2)) * p2.facing), -8.5)
+                p1.kb_x = float((p2_attack["knockback"] + (p1.damage // 2)) * p2.facing)
+                p1.kb_y = -8.5
                 p1.hitstun = int(abs(p1.kb_x) * 0.75)
         p2.has_hit = True
         # Exit ledge hang if the player was hit while hanging.
@@ -135,8 +141,6 @@ def apply_DI(p, keys, left, right, up, down):
             p.kb_y -= DI_STRENGTH
         if keys[down]:
             p.kb_y += DI_STRENGTH
-        if getattr(p, 'body', None):
-            p.body.velocity = (p.kb_x, p.kb_y)
 
 
 def shield_and_movement(p, keys, left_key, right_key, shield_key):
@@ -167,16 +171,8 @@ def shield_and_movement(p, keys, left_key, right_key, shield_key):
     # Movement input allowed when not stunned/shielding/hanging/prone
     if not p.is_shielding and p.shield_stun == 0 and p.hitstun == 0 and not p.is_hanging and not getattr(p, 'prone', False):
         if keys[left_key]:
+            p.x -= PLAYER_SPEED
             p.facing = -1
-            if getattr(p, 'body', None):
-                p.set_horizontal_velocity(-PLAYER_SPEED * 0.35)
-            else:
-                p.x -= PLAYER_SPEED
-        elif keys[right_key]:
+        if keys[right_key]:
+            p.x += PLAYER_SPEED
             p.facing = 1
-            if getattr(p, 'body', None):
-                p.set_horizontal_velocity(PLAYER_SPEED * 0.35)
-            else:
-                p.x += PLAYER_SPEED
-        elif getattr(p, 'body', None):
-            p.set_horizontal_velocity(0.0)
